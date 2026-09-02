@@ -1,0 +1,45 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 앱 내 브랜드 마크: 틸 라운드 배경 + 서랍/파일/마이크 (런처 아이콘과 동일 모티프) -->
+    <path android:fillColor="#00897B"
+        android:pathData="M24,0 h60 a24,24 0 0 1 24,24 v60 a24,24 0 0 1 -24,24 h-60 a24,24 0 0 1 -24,-24 v-60 a24,24 0 0 1 24,-24 Z" />
+
+    <group
+        android:scaleX="0.62"
+        android:scaleY="0.62"
+        android:translateX="0.7"
+        android:translateY="-2.4">
+
+        <path android:fillColor="#0A5A50"
+            android:pathData="M34,56 h92 a7,7 0 0 1 7,7 v56 a7,7 0 0 1 -7,7 h-92 a7,7 0 0 1 -7,-7 v-56 a7,7 0 0 1 7,-7 Z" />
+
+        <path android:fillColor="#CFE3DF"
+            android:pathData="M61,36 h44 a6,6 0 0 1 6,6 v40 a6,6 0 0 1 -6,6 h-44 a6,6 0 0 1 -6,-6 v-40 a6,6 0 0 1 6,-6 Z" />
+        <path android:fillColor="#F5B301"
+            android:pathData="M52,43 h50 a6,6 0 0 1 6,6 v35 a6,6 0 0 1 -6,6 h-50 a6,6 0 0 1 -6,-6 v-35 a6,6 0 0 1 6,-6 Z" />
+        <path android:fillColor="#FFFFFF"
+            android:pathData="M46,47 h54 a6,6 0 0 1 6,6 v34 a6,6 0 0 1 -6,6 h-54 a6,6 0 0 1 -6,-6 v-34 a6,6 0 0 1 6,-6 Z" />
+        <path android:fillColor="#00897B"
+            android:pathData="M55,63 h4 v14 h-4 Z M63,59 h4 v22 h-4 Z M71,66 h4 v8 h-4 Z M79,61 h4 v18 h-4 Z M87,64 h4 v12 h-4 Z" />
+
+        <path android:fillColor="#0E6B60"
+            android:pathData="M33,92 h94 a11,11 0 0 1 11,11 v25 a11,11 0 0 1 -11,11 h-94 a11,11 0 0 1 -11,-11 v-25 a11,11 0 0 1 11,-11 Z" />
+        <path android:fillColor="#BFE3DD"
+            android:pathData="M62,112 h36 a4,4 0 0 1 0,8 h-36 a4,4 0 0 1 0,-8 Z" />
+
+        <path android:fillColor="#FFFFFF"
+            android:pathData="M96,119 a27,27 0 1 0 54,0 a27,27 0 1 0 -54,0 Z" />
+        <path android:fillColor="#00897B"
+            android:pathData="M117,108 a6,6 0 0 1 12,0 v8 a6,6 0 0 1 -12,0 Z" />
+        <path android:strokeColor="#00897B" android:strokeWidth="4" android:strokeLineCap="round"
+            android:pathData="M110,117 a13,13 0 0 0 26,0" />
+        <path android:strokeColor="#00897B" android:strokeWidth="4" android:strokeLineCap="round"
+            android:pathData="M123,130 v7" />
+        <path android:strokeColor="#00897B" android:strokeWidth="4" android:strokeLineCap="round"
+            android:pathData="M115,137 h16" />
+    </group>
+</vector>

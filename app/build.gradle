@@ -1,0 +1,77 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.devtools.ksp'
+}
+
+android {
+    namespace 'com.blackcore.callstar'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.blackcore.callstar"
+        minSdk 30
+        targetSdk 36
+        versionCode 17
+        versionName "0.17.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+    composeOptions {
+        // Kotlin 1.9.22 -> Compose compiler 1.5.10
+        kotlinCompilerExtensionVersion '1.5.10'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "CallStar-${variant.versionName}-${variant.versionCode}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-compose:1.9.2'
+
+    // [단계 3] Room DB
+    def roomVersion = '2.6.1'
+    implementation "androidx.room:room-runtime:$roomVersion"
+    implementation "androidx.room:room-ktx:$roomVersion"
+    ksp "androidx.room:room-compiler:$roomVersion"
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    // [단계 5] 백업 폴더(SAF) 복사
+    implementation 'androidx.documentfile:documentfile:1.0.1'
+
+    def composeBom = platform('androidx.compose:compose-bom:2024.09.02')
+    implementation composeBom
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.6'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.6'
+
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+}

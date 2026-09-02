@@ -1,0 +1,16 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+
+# APK는 저장소에 넣지 않고 GitHub Releases로 배포
+*.apk
+# 릴리스 서명키 (절대 커밋 금지)
+*.jks
+*.keystore
