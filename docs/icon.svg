@@ -1,0 +1,29 @@
+<svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" width="160" height="160" role="img" aria-label="통화서랍 아이콘">
+  <title>통화서랍</title>
+  <!-- 배경 스퀘어클 -->
+  <rect width="160" height="160" rx="38" fill="#00897B"/>
+  <!-- 서랍+파일+마이크 (중앙, 살짝 위) -->
+  <g transform="translate(0,-8)">
+    <rect x="27" y="56" width="106" height="70" rx="7" fill="#0A5A50"/>
+
+    <rect x="55" y="36" width="56" height="52" rx="6" fill="#CFE3DF"/>
+    <rect x="46" y="43" width="62" height="47" rx="6" fill="#F5B301"/>
+    <rect x="40" y="47" width="66" height="46" rx="6" fill="#FFFFFF"/>
+    <g fill="#00897B">
+      <rect x="55" y="63" width="4" height="14" rx="2"/>
+      <rect x="63" y="59" width="4" height="22" rx="2"/>
+      <rect x="71" y="66" width="4" height="8"  rx="2"/>
+      <rect x="79" y="61" width="4" height="18" rx="2"/>
+      <rect x="87" y="64" width="4" height="12" rx="2"/>
+    </g>
+
+    <rect x="22" y="92" width="116" height="47" rx="11" fill="#0E6B60"/>
+    <rect x="58" y="112" width="44" height="8" rx="4" fill="#BFE3DD"/>
+
+    <circle cx="123" cy="119" r="27" fill="#FFFFFF"/>
+    <rect x="117" y="102" width="12" height="22" rx="6" fill="#00897B"/>
+    <path d="M110,117 a13,13 0 0 0 26,0" fill="none" stroke="#00897B" stroke-width="4" stroke-linecap="round"/>
+    <line x1="123" y1="130" x2="123" y2="137" stroke="#00897B" stroke-width="4" stroke-linecap="round"/>
+    <line x1="115" y1="137" x2="131" y2="137" stroke="#00897B" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

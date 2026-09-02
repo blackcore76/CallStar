@@ -1,4 +1,8 @@
-# 통화서랍 (CallStar)
+<p align="center">
+  <img src="docs/icon.svg" width="128" alt="통화서랍 아이콘">
+</p>
+
+<h1 align="center">통화서랍 (CallStar)</h1>
 
 **통화녹음 중요도 구분 · 관리 앱** — 갤럭시 기본 통화녹음을 통화 종료 직후 별점으로 분류하고, 낮은 점수는 정리·삭제, 중요한 통화는 안전하게 백업합니다.
 
