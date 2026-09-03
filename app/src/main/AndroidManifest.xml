@@ -10,8 +10,11 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
-    <!-- [단계 2] 통화 종료 후 화면 위에 별점 팝업(오버레이) 띄우기 -->
+    <!-- [단계 2] 통화 종료 후 화면 위에 별점 팝업(오버레이) 띄우기 (선택 방식) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 통화 후 별점 알림 (기본 방식) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -38,6 +41,11 @@
             android:theme="@style/Theme.Transparent"
             android:excludeFromRecents="true"
             android:noHistory="true" />
+
+        <!-- 별점 알림의 버튼(중요/정리후보/삭제) 처리 -->
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:exported="false" />
 
         <!-- 통화 종료 감지 리시버 (상시 FGS 없음, goAsync 로 짧게 동작) -->
         <receiver

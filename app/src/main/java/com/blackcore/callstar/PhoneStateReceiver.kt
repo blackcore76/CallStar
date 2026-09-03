@@ -101,14 +101,18 @@ class PhoneStateReceiver : BroadcastReceiver() {
 
                 if (fresh) {
                     found[0] = true
-                    // [단계 2] Toast 대신 오버레이 별점 팝업.
-                    // 오버레이 창이 뜨면 프로세스가 perceptible 로 승격돼 얼려지지 않음.
-                    if (RatingOverlay.canDraw(appContext)) {
+                    // 기본: 알림(잠금화면/알림창에 남아 나중에 마킹 가능).
+                    // 설정에서 오버레이 팝업을 켠 경우에만 즉시 팝업.
+                    val useOverlay = com.blackcore.callstar.data.AppPrefs.postCallOverlay(appContext)
+                    if (useOverlay && RatingOverlay.canDraw(appContext)) {
+                        RatingOverlay.show(appContext, rec!!)
+                    } else if (NotificationHelper.canPost(appContext)) {
+                        NotificationHelper.showRatingNotification(appContext, rec!!)
+                    } else if (RatingOverlay.canDraw(appContext)) {
+                        // 알림 권한 없으면 오버레이로 폴백
                         RatingOverlay.show(appContext, rec!!)
                     } else {
-                        // 오버레이 권한이 아직 없으면 최소한 로그로 확인
-                        Log.w(TAG, "오버레이 권한 없음 → 팝업 생략: ${rec!!.displayName}")
-                        showToast(appContext, "CallStar: 오버레이 권한을 켜주세요 (${rec.displayName})")
+                        Log.w(TAG, "알림/오버레이 권한 모두 없음 → 표시 생략: ${rec!!.displayName}")
                     }
                     pending.finish()
                 } else if (idx == POLL_DELAYS_MS.lastIndex) {

@@ -111,6 +111,18 @@ private fun requiredPermissions(): Array<String> {
     val list = mutableListOf(Manifest.permission.READ_PHONE_STATE)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         list.add(Manifest.permission.READ_MEDIA_AUDIO)
+        list.add(Manifest.permission.POST_NOTIFICATIONS)   // 통화 후 별점 알림
+    } else {
+        list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+    return list.toTypedArray()
+}
+
+/** 앱 동작에 필수인 권한(전화상태 + 오디오). 알림 권한은 필수가 아니라 별도. */
+private fun essentialPermissions(): Array<String> {
+    val list = mutableListOf(Manifest.permission.READ_PHONE_STATE)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        list.add(Manifest.permission.READ_MEDIA_AUDIO)
     } else {
         list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
     }
@@ -118,7 +130,7 @@ private fun requiredPermissions(): Array<String> {
 }
 
 private fun allGranted(ctx: Context): Boolean =
-    requiredPermissions().all {
+    essentialPermissions().all {
         ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED
     }
 
@@ -155,6 +167,7 @@ private fun CallStarApp(
 
     var showSettings by remember { mutableStateOf(false) }
     var isPremium by remember { mutableStateOf(AppPrefs.isPremium(ctx)) }
+    var overlayMode by remember { mutableStateOf(AppPrefs.postCallOverlay(ctx)) }
     var backupFolder by remember {
         mutableStateOf(backupFolderName(ctx))
     }
@@ -282,24 +295,26 @@ private fun CallStarApp(
                 backupFolder = backupFolder,
                 themeMode = themeMode,
                 onThemeChange = onThemeChange,
+                overlayMode = overlayMode,
+                canOverlay = canOverlay,
+                onToggleOverlayMode = {
+                    overlayMode = !overlayMode
+                    AppPrefs.setPostCallOverlay(ctx, overlayMode)
+                },
+                onGrantOverlay = {
+                    ctx.startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${ctx.packageName}"),
+                        )
+                    )
+                },
                 onPickFolder = { folderLauncher.launch(null) },
                 onTogglePremium = {
                     isPremium = !isPremium
                     AppPrefs.setPremium(ctx, isPremium)
                 },
             )
-        }
-
-        if (!canOverlay) {
-            Spacer(Modifier.height(8.dp))
-            OverlayBanner {
-                ctx.startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${ctx.packageName}"),
-                    )
-                )
-            }
         }
 
         Spacer(Modifier.height(10.dp))
@@ -606,11 +621,36 @@ private fun SettingsPanel(
     backupFolder: String?,
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
+    overlayMode: Boolean,
+    canOverlay: Boolean,
+    onToggleOverlayMode: () -> Unit,
+    onGrantOverlay: () -> Unit,
     onPickFolder: () -> Unit,
     onTogglePremium: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("통화 후 별점 표시", style = typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (overlayMode) "즉시 팝업(오버레이)" else "알림 (권장)",
+                        style = typography.bodyMedium,
+                    )
+                    Text(
+                        if (overlayMode) "통화 끝나면 화면에 바로 팝업"
+                        else "알림창·잠금화면에 남아 나중에도 마킹",
+                        style = typography.bodySmall,
+                        color = Color(0xFF9E9E9E),
+                    )
+                }
+                Switch(checked = overlayMode, onCheckedChange = { onToggleOverlayMode() })
+            }
+            if (overlayMode && !canOverlay) {
+                OutlinedButton(onClick = onGrantOverlay) { Text("오버레이 권한 켜기") }
+            }
+
+            Spacer(Modifier.height(8.dp))
             Text("화면 테마", style = typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { m ->
@@ -663,24 +703,6 @@ private fun backupFolderName(context: Context): String? {
         DocumentFile.fromTreeUri(context, Uri.parse(s))?.name ?: s
     } catch (_: Exception) {
         s
-    }
-}
-
-@Composable
-private fun OverlayBanner(onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "통화 후 별점 팝업을 쓰려면 '다른 앱 위에 표시' 권한이 필요해요",
-                style = typography.bodySmall,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = onClick) { Text("켜기") }
-        }
     }
 }
 

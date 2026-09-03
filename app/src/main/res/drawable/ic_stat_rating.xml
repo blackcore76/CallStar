@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <!-- 상태바용 단색 별 (시스템이 흰색으로 틴트) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,3 L14.2,8.6 L20.2,9 L15.6,12.9 L17.1,18.7 L12,15.4 L6.9,18.7 L8.4,12.9 L3.8,9 L9.8,8.6 Z" />
+</vector>

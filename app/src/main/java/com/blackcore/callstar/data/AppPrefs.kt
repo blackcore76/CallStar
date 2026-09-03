@@ -22,6 +22,13 @@ object AppPrefs {
     fun setBackupTreeUri(context: Context, value: String?) =
         sp(context).edit().putString(K_BACKUP_TREE, value).apply()
 
+    private const val K_POSTCALL_OVERLAY = "postcall_overlay"
+
+    /** 통화 후 방식: false=알림(기본), true=오버레이 팝업 */
+    fun postCallOverlay(context: Context): Boolean = sp(context).getBoolean(K_POSTCALL_OVERLAY, false)
+    fun setPostCallOverlay(context: Context, value: Boolean) =
+        sp(context).edit().putBoolean(K_POSTCALL_OVERLAY, value).apply()
+
     /** 테마 모드 키: "system" | "light" | "dark" */
     fun themeModeKey(context: Context): String = sp(context).getString(K_THEME, "system") ?: "system"
     fun setThemeModeKey(context: Context, key: String) =
