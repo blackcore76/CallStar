@@ -101,6 +101,28 @@ class PhoneStateReceiver : BroadcastReceiver() {
 
                 if (fresh) {
                     found[0] = true
+
+                    // ★ 자동 중요 마킹(프리미엄): 등록된 이름/번호와 파일명이 매칭되면
+                    //   묻지 않고 바로 중요로 표시(+백업). 별점 요청 알림/팝업은 생략.
+                    val autoKw = AutoMarkRules.autoKeepMatch(appContext, rec!!.displayName)
+                    if (autoKw != null) {
+                        try {
+                            kotlinx.coroutines.runBlocking {
+                                com.blackcore.callstar.data.RatingStore.saveNow(
+                                    appContext, rec, com.blackcore.callstar.data.Rating.KEEP,
+                                )
+                            }
+                            Log.d(TAG, "자동 중요 마킹: '${autoKw}' 매칭 → ${rec.displayName}")
+                            if (NotificationHelper.canPost(appContext)) {
+                                NotificationHelper.showAutoMarked(appContext, rec, autoKw)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "자동 중요 마킹 실패", e)
+                        }
+                        pending.finish()
+                        return@postDelayed
+                    }
+
                     // 기본: 알림(잠금화면/알림창에 남아 나중에 마킹 가능).
                     // 설정에서 오버레이 팝업을 켠 경우에만 즉시 팝업.
                     val useOverlay = com.blackcore.callstar.data.AppPrefs.postCallOverlay(appContext)

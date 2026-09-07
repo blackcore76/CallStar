@@ -28,7 +28,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -40,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialTheme.typography
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -76,6 +81,7 @@ import com.blackcore.callstar.ui.DeleteRed
 import com.blackcore.callstar.ui.LaterGray
 import com.blackcore.callstar.ui.StarGold
 import com.blackcore.callstar.ui.ThemeMode
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -166,6 +172,12 @@ private fun CallStarApp(
     DisposableEffect(Unit) { onDispose { player.stop() } }
 
     var showSettings by remember { mutableStateOf(false) }
+    // 알림 타고 들어왔을 때 "이 통화들이에요" 강조할 id 집합 + 세션 1회 판단 플래그
+    var highlightIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var hlConsidered by remember { mutableStateOf(false) }
+    var hlEnabled by remember { mutableStateOf(AppPrefs.highlightEnabled(ctx)) }
+    var autoMarkEnabled by remember { mutableStateOf(AppPrefs.autoMarkEnabled(ctx)) }
+    var autoKeywords by remember { mutableStateOf(AppPrefs.autoMarkKeywords(ctx)) }
     var isPremium by remember { mutableStateOf(AppPrefs.isPremium(ctx)) }
     var overlayMode by remember { mutableStateOf(AppPrefs.postCallOverlay(ctx)) }
     var backupFolder by remember {
@@ -194,6 +206,8 @@ private fun CallStarApp(
         scope.launch {
             rows = CallListRepository.load(ctx)
             selected = selected intersect rows.map { it.recording.id }.toSet()
+            // 앱에서 마킹/삭제한 건을 알림 대기열에도 반영(카운트/표시 동기화)
+            NotificationHelper.reconcile(ctx, rows.filter { it.rating == null }.map { it.recording.id }.toSet())
             loading = false
         }
     }
@@ -213,6 +227,7 @@ private fun CallStarApp(
             selected = selected - deleted.toSet()
             pendingDelete = emptyList()
             rows = CallListRepository.load(ctx)
+            NotificationHelper.reconcile(ctx, rows.filter { it.rating == null }.map { it.recording.id }.toSet())
             status = if (result.resultCode == android.app.Activity.RESULT_OK)
                 "삭제 완료" else "삭제 취소됨 (남아있는 파일은 그대로)"
         }
@@ -235,6 +250,7 @@ private fun CallStarApp(
             val n = recs.size
             selected = emptySet()
             rows = CallListRepository.load(ctx)
+            NotificationHelper.reconcile(ctx, rows.filter { it.rating == null }.map { it.recording.id }.toSet())
             status = "$n 건을 " + if (rating == Rating.KEEP) "★ 중요로 표시" else "△ 정리후보로 표시"
         }
     }
@@ -262,6 +278,31 @@ private fun CallStarApp(
     }
 
     val visible = if (laterOnly) rows.filter { it.rating == Rating.LATER } else rows
+    val listState = rememberLazyListState()
+
+    // 알림 타고 들어온 경우: 알림 대기열에 남은 통화들을 목록에서 강조해 "여기예요" 안내.
+    // 시각 공해 방지를 위해 최초 몇 번만(HL_AUTO_MAX) 자동으로, 이후엔 설정에서 켜야 함.
+    LaunchedEffect(rows) {
+        if (!hlConsidered && rows.isNotEmpty()) {
+            hlConsidered = true
+            if (AppPrefs.highlightEnabled(ctx) &&
+                AppPrefs.highlightShownCount(ctx) < AppPrefs.HL_AUTO_MAX
+            ) {
+                val pending = NotificationHelper.pendingIds(ctx).toSet()
+                val present = rows.map { it.recording.id }.filter { it in pending }.toSet()
+                if (present.isNotEmpty()) {
+                    AppPrefs.bumpHighlightShownCount(ctx)
+                    highlightIds = present
+                    // 첫 강조 항목으로 스르륵 스크롤
+                    val idx = visible.indexOfFirst { it.recording.id in present }
+                    if (idx >= 0) listState.animateScrollToItem(idx)
+                    // 잠시 뒤 강조 해제(주목만 시키고 빠짐)
+                    delay(6000L)
+                    highlightIds = emptySet()
+                }
+            }
+        }
+    }
 
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(12.dp))
@@ -275,6 +316,17 @@ private fun CallStarApp(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text("통화서랍", style = typography.headlineSmall)
+                    Spacer(Modifier.weight(1f))
+                    // 버전 표시: 디버그는 빌드번호 포함, 릴리즈는 버전만
+                    Text(
+                        if (BuildConfig.DEBUG) {
+                            "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+                        } else {
+                            "v${BuildConfig.VERSION_NAME}"
+                        },
+                        style = typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Text(
                     "통화녹음 ${rows.size}건 · 평가됨 ${rows.count { it.rating != null }}건",
@@ -314,8 +366,24 @@ private fun CallStarApp(
                     isPremium = !isPremium
                     AppPrefs.setPremium(ctx, isPremium)
                 },
+                highlightEnabled = hlEnabled,
+                onToggleHighlight = {
+                    hlEnabled = !hlEnabled
+                    AppPrefs.setHighlightEnabled(ctx, hlEnabled)
+                    // 다시 켜면 앞으로 몇 번 더 강조해주도록 카운터 리셋
+                    if (hlEnabled) AppPrefs.resetHighlightShownCount(ctx)
+                },
+                autoMarkEnabled = autoMarkEnabled,
+                autoKeywords = autoKeywords,
+                onToggleAutoMark = {
+                    autoMarkEnabled = !autoMarkEnabled
+                    AppPrefs.setAutoMarkEnabled(ctx, autoMarkEnabled)
+                },
+                onAddKeyword = { autoKeywords = AppPrefs.addAutoMarkKeyword(ctx, it) },
+                onRemoveKeyword = { autoKeywords = AppPrefs.removeAutoMarkKeyword(ctx, it) },
+                modifier = Modifier.weight(1f),
             )
-        }
+        } else {
 
         Spacer(Modifier.height(10.dp))
         // 컨트롤 바: 필터 토글 + 전체선택
@@ -359,6 +427,7 @@ private fun CallStarApp(
         } else {
             LazyColumn(
                 Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(visible, key = { it.recording.id }) { row ->
@@ -366,6 +435,7 @@ private fun CallStarApp(
                     CallRowItem(
                         row = row,
                         checked = isChecked,
+                        highlighted = row.recording.id in highlightIds,
                         onToggleSelect = {
                             selected = if (isChecked) selected - row.recording.id
                             else selected + row.recording.id
@@ -387,6 +457,7 @@ private fun CallStarApp(
                 onDelete = { requestDelete(selected.toList()) },
             )
         }
+        } // else (설정 열려있지 않을 때만 목록/일괄바 표시)
     }
 
     // 항목 탭 → 중요/정리후보/평가해제/삭제 지정
@@ -548,14 +619,20 @@ private fun ItemActionDialog(
 private fun CallRowItem(
     row: CallRow,
     checked: Boolean,
+    highlighted: Boolean,
     onToggleSelect: () -> Unit,
     onOpen: () -> Unit,
 ) {
-    Card(
-        Modifier
-            .fillMaxWidth()
-            .clickable { onOpen() },   // 본문 탭 → 재생/중요/정리후보/삭제
-    ) {
+    val accent = MaterialTheme.colorScheme.primary
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .then(
+            // 알림 안내 강조: 테두리 선 + 왼쪽 굵은 강조바로 "이 통화예요" 주목
+            if (highlighted) Modifier.border(2.dp, accent, RoundedCornerShape(12.dp))
+            else Modifier
+        )
+        .clickable { onOpen() }   // 본문 탭 → 재생/중요/정리후보/삭제
+    Card(cardModifier) {
         Row(
             Modifier.padding(start = 4.dp, top = 10.dp, bottom = 10.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -627,9 +704,22 @@ private fun SettingsPanel(
     onGrantOverlay: () -> Unit,
     onPickFolder: () -> Unit,
     onTogglePremium: () -> Unit,
+    highlightEnabled: Boolean,
+    onToggleHighlight: () -> Unit,
+    autoMarkEnabled: Boolean,
+    autoKeywords: List<String>,
+    onToggleAutoMark: () -> Unit,
+    onAddKeyword: (String) -> Unit,
+    onRemoveKeyword: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Column(
+            Modifier
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text("통화 후 별점 표시", style = typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -692,6 +782,83 @@ private fun SettingsPanel(
                 style = typography.bodySmall,
                 color = Color(0xFF9E9E9E),
             )
+
+            Spacer(Modifier.height(8.dp))
+            Text("자동 중요 번호/이름 (프리미엄)", style = typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (autoMarkEnabled) "켜짐" else "꺼짐",
+                        style = typography.bodyMedium,
+                    )
+                    Text(
+                        "등록한 이름/번호와의 통화는 묻지 않고 ★중요로 표시(+백업)해요",
+                        style = typography.bodySmall,
+                        color = Color(0xFF9E9E9E),
+                    )
+                }
+                Switch(checked = autoMarkEnabled, onCheckedChange = { onToggleAutoMark() })
+            }
+            if (!isPremium) {
+                Text(
+                    "프리미엄을 켜야 실제로 동작해요.",
+                    style = typography.bodySmall,
+                    color = Color(0xFF757575),
+                )
+            }
+            // 키워드 입력
+            var kwInput by remember { mutableStateOf("") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = kwInput,
+                    onValueChange = { kwInput = it },
+                    singleLine = true,
+                    label = { Text("이름 또는 번호") },
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { onAddKeyword(kwInput); kwInput = "" },
+                    enabled = kwInput.isNotBlank(),
+                ) { Text("추가") }
+            }
+            // 등록 목록
+            if (autoKeywords.isEmpty()) {
+                Text(
+                    "아직 등록된 항목이 없어요. 예: 큰형, 회사, 01012345678",
+                    style = typography.bodySmall,
+                    color = Color(0xFF9E9E9E),
+                )
+            } else {
+                autoKeywords.forEach { kw ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("• $kw", style = typography.bodyMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { onRemoveKeyword(kw) }) { Text("삭제") }
+                    }
+                }
+            }
+            Text(
+                "저장된 연락처는 통화녹음 파일에 ‘이름’으로 남아요. 그 경우 번호 대신 저장된 이름을 등록하세요.",
+                style = typography.bodySmall,
+                color = Color(0xFF757575),
+            )
+
+            Spacer(Modifier.height(8.dp))
+            Text("알림 안내 강조", style = typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (highlightEnabled) "켜짐" else "꺼짐",
+                        style = typography.bodyMedium,
+                    )
+                    Text(
+                        "알림 타고 들어오면 해당 통화를 목록에서 잠깐 강조해요",
+                        style = typography.bodySmall,
+                        color = Color(0xFF9E9E9E),
+                    )
+                }
+                Switch(checked = highlightEnabled, onCheckedChange = { onToggleHighlight() })
+            }
         }
     }
 }

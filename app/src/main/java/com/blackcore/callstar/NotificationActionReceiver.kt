@@ -30,7 +30,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getLongExtra(EXTRA_ID, -1L)
         val name = intent.getStringExtra(EXTRA_NAME).orEmpty()
-        val notifId = intent.getIntExtra(EXTRA_NOTIF_ID, -1)
         if (id <= 0L) return
 
         val app = context.applicationContext
@@ -45,11 +44,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_KEEP -> {
                 saveAsync(app, rec, Rating.KEEP)
-                if (notifId >= 0) NotificationHelper.cancel(app, notifId)
+                NotificationHelper.advance(app, id)
             }
             ACTION_LATER -> {
                 saveAsync(app, rec, Rating.LATER)
-                if (notifId >= 0) NotificationHelper.cancel(app, notifId)
+                NotificationHelper.advance(app, id)
             }
             ACTION_DELETE -> {
                 // 시스템 삭제 확인창(투명 액티비티 경유)
@@ -58,7 +57,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 } catch (e: Exception) {
                     Log.e(TAG, "삭제 액티비티 시작 실패", e)
                 }
-                if (notifId >= 0) NotificationHelper.cancel(app, notifId)
+                // 결정을 내렸으므로 대기열에서 빼고 다음 통화로 넘어간다.
+                NotificationHelper.advance(app, id)
             }
         }
     }
