@@ -28,18 +28,20 @@ object AutoMarkRules {
 
     /**
      * 파일명이 등록 키워드와 매칭되면 그 키워드를 반환(안내 문구용), 아니면 null.
-     * - 이름/문자열: 대소문자 무시 부분일치
+     * - 이름/문자열: 대소문자·공백 무시 "정확 일치" (과다매칭 방지 — "누나"가 "누나친구"를 잡지 않음)
      * - 숫자(번호): 구분기호 무시하고 4자리 이상일 때 숫자열 부분일치
      */
     fun matchedKeyword(keywords: List<String>, displayName: String): String? {
         if (keywords.isEmpty()) return null
         val label = callerLabel(displayName)
-        val labelLc = label.lowercase()
+        val labelNorm = label.lowercase().replace(" ", "")
         val labelDigits = label.filter { it.isDigit() }
         for (kw in keywords) {
             val k = kw.trim()
             if (k.isEmpty()) continue
-            if (labelLc.contains(k.lowercase())) return kw
+            // 이름: 정확 일치(공백/대소문자 무시)
+            if (labelNorm == k.lowercase().replace(" ", "")) return kw
+            // 번호: 4자리 이상 숫자열 포함
             val kDigits = k.filter { it.isDigit() }
             if (kDigits.length >= 4 && labelDigits.contains(kDigits)) return kw
         }

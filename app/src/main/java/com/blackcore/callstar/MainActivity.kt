@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.provider.ContactsContract
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -200,6 +201,16 @@ private fun CallStarApp(
         }
     }
 
+    // 시스템 연락처 선택기: READ_CONTACTS 권한 없이, 사용자가 고른 한 명의 이름만 받아온다.
+    val contactLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickContact()
+    ) { uri ->
+        val name = uri?.let { contactDisplayName(ctx, it) }?.trim()
+        if (!name.isNullOrEmpty()) {
+            autoKeywords = AppPrefs.addAutoMarkKeyword(ctx, name)
+        }
+    }
+
     fun refresh() {
         if (!allGranted(ctx)) return
         loading = true
@@ -381,6 +392,7 @@ private fun CallStarApp(
                 },
                 onAddKeyword = { autoKeywords = AppPrefs.addAutoMarkKeyword(ctx, it) },
                 onRemoveKeyword = { autoKeywords = AppPrefs.removeAutoMarkKeyword(ctx, it) },
+                onPickContact = { contactLauncher.launch(null) },
                 modifier = Modifier.weight(1f),
             )
         } else {
@@ -711,6 +723,7 @@ private fun SettingsPanel(
     onToggleAutoMark: () -> Unit,
     onAddKeyword: (String) -> Unit,
     onRemoveKeyword: (String) -> Unit,
+    onPickContact: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -806,14 +819,18 @@ private fun SettingsPanel(
                     color = Color(0xFF757575),
                 )
             }
-            // 키워드 입력
+            // 연락처에서 선택(권한 없이 시스템 선택기) — 저장된 이름 정확히 등록
+            OutlinedButton(onClick = onPickContact, modifier = Modifier.fillMaxWidth()) {
+                Text("📇 연락처에서 선택")
+            }
+            // 직접 입력(미저장 번호 등)
             var kwInput by remember { mutableStateOf("") }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = kwInput,
                     onValueChange = { kwInput = it },
                     singleLine = true,
-                    label = { Text("이름 또는 번호") },
+                    label = { Text("직접 입력 (이름·번호)") },
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
@@ -838,7 +855,8 @@ private fun SettingsPanel(
                 }
             }
             Text(
-                "저장된 연락처는 통화녹음 파일에 ‘이름’으로 남아요. 그 경우 번호 대신 저장된 이름을 등록하세요.",
+                "연락처에서 고르면 그 이름과 ‘정확히 일치’하는 통화만 자동 처리돼요(비슷한 이름 오작동 없음). " +
+                    "저장 안 된 번호는 직접 입력하세요.",
                 style = typography.bodySmall,
                 color = Color(0xFF757575),
             )
@@ -860,6 +878,21 @@ private fun SettingsPanel(
                 Switch(checked = highlightEnabled, onCheckedChange = { onToggleHighlight() })
             }
         }
+    }
+}
+
+/** 연락처 선택기에서 받은 URI로 표시 이름만 조회(READ_CONTACTS 불필요 — 선택 항목에 임시 접근 허용). */
+private fun contactDisplayName(context: Context, uri: android.net.Uri): String? {
+    return try {
+        context.contentResolver.query(
+            uri,
+            arrayOf(ContactsContract.Contacts.DISPLAY_NAME),
+            null, null, null,
+        )?.use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+    } catch (e: Exception) {
+        null
     }
 }
 
