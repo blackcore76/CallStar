@@ -225,8 +225,13 @@ object NotificationHelper {
         val contentPI = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-            PendingIntent.FLAG_IMMUTABLE,
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP,
+                )
+                .putExtra(MainActivity.EXTRA_FROM_NOTI, true),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
         val title = if (remaining > 0) "방금 통화 · $name  (외 ${remaining}건)" else "방금 통화 · $name"

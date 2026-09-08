@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.ContactsContract
 import android.provider.Settings
+import android.text.format.DateUtils
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -29,6 +30,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -82,15 +85,19 @@ import com.blackcore.callstar.ui.DeleteRed
 import com.blackcore.callstar.ui.LaterGray
 import com.blackcore.callstar.ui.StarGold
 import com.blackcore.callstar.ui.ThemeMode
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
+
+    // 알림에서 눌러 진입한 순간을 알리는 시그널(값이 바뀌면 목록에서 대기 통화 강조).
+    private val fromNotiSignal = mutableStateOf(0L)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        maybeSignalFromNoti(intent)
         setContent {
             val ctx = LocalContext.current
             var themeMode by remember { mutableStateOf(ThemeMode.fromKey(AppPrefs.themeModeKey(ctx))) }
@@ -104,11 +111,29 @@ class MainActivity : ComponentActivity() {
                                 themeMode = m
                                 AppPrefs.setThemeModeKey(ctx, m.key)
                             },
+                            fromNotiSignal = fromNotiSignal.value,
                         )
                     }
                 }
             }
         }
+    }
+
+    // 이미 실행 중일 때 알림 탭으로 재진입하면 여기로 새 인텐트가 온다.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        maybeSignalFromNoti(intent)
+    }
+
+    private fun maybeSignalFromNoti(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_FROM_NOTI, false) == true) {
+            fromNotiSignal.value = System.currentTimeMillis()
+        }
+    }
+
+    companion object {
+        const val EXTRA_FROM_NOTI = "from_noti"
     }
 }
 
@@ -153,6 +178,7 @@ private fun CallStarApp(
     modifier: Modifier = Modifier,
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
+    fromNotiSignal: Long = 0L,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -174,8 +200,9 @@ private fun CallStarApp(
 
     var showSettings by remember { mutableStateOf(false) }
     // 알림 타고 들어왔을 때 "이 통화들이에요" 강조할 id 집합 + 세션 1회 판단 플래그
-    var highlightIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
-    var hlConsidered by remember { mutableStateOf(false) }
+    var hlConsumedSignal by remember { mutableStateOf(0L) }
+    var blinking by remember { mutableStateOf(false) }   // 알림 진입 시 "여기요~" 깜빡임 진행 중
+    val hlPulse = remember { Animatable(1f) }            // 깜빡임 강도(0~1)
     var hlEnabled by remember { mutableStateOf(AppPrefs.highlightEnabled(ctx)) }
     var autoMarkEnabled by remember { mutableStateOf(AppPrefs.autoMarkEnabled(ctx)) }
     var autoKeywords by remember { mutableStateOf(AppPrefs.autoMarkKeywords(ctx)) }
@@ -291,26 +318,25 @@ private fun CallStarApp(
     val visible = if (laterOnly) rows.filter { it.rating == Rating.LATER } else rows
     val listState = rememberLazyListState()
 
-    // 알림 타고 들어온 경우: 알림 대기열에 남은 통화들을 목록에서 강조해 "여기예요" 안내.
-    // 시각 공해 방지를 위해 최초 몇 번만(HL_AUTO_MAX) 자동으로, 이후엔 설정에서 켜야 함.
-    LaunchedEffect(rows) {
-        if (!hlConsidered && rows.isNotEmpty()) {
-            hlConsidered = true
-            if (AppPrefs.highlightEnabled(ctx) &&
-                AppPrefs.highlightShownCount(ctx) < AppPrefs.HL_AUTO_MAX
-            ) {
-                val pending = NotificationHelper.pendingIds(ctx).toSet()
-                val present = rows.map { it.recording.id }.filter { it in pending }.toSet()
-                if (present.isNotEmpty()) {
-                    AppPrefs.bumpHighlightShownCount(ctx)
-                    highlightIds = present
-                    // 첫 강조 항목으로 스르륵 스크롤
-                    val idx = visible.indexOfFirst { it.recording.id in present }
-                    if (idx >= 0) listState.animateScrollToItem(idx)
-                    // 잠시 뒤 강조 해제(주목만 시키고 빠짐)
-                    delay(6000L)
-                    highlightIds = emptySet()
+    // 알림에서 눌러 진입할 때(설정 켜짐 시) "오늘 미분류" 통화로 스크롤 + 2번 반짝(총 2초).
+    // 반짝임 후에는 정적 테두리가 그대로 유지된다(오늘 미분류 조건은 목록 렌더에서 판단).
+    // fromNotiSignal 은 알림 탭 순간에만 갱신되므로 일반 실행/새로고침엔 반짝이지 않는다.
+    LaunchedEffect(fromNotiSignal, rows) {
+        if (fromNotiSignal > hlConsumedSignal && rows.isNotEmpty()) {
+            hlConsumedSignal = fromNotiSignal
+            if (!AppPrefs.highlightEnabled(ctx)) return@LaunchedEffect
+            val firstIdx = visible.indexOfFirst {
+                it.rating == null && DateUtils.isToday(it.recording.dateModifiedSec * 1000L)
+            }
+            if (firstIdx >= 0) {
+                listState.animateScrollToItem(firstIdx)
+                blinking = true
+                hlPulse.snapTo(1f)
+                repeat(2) {                       // 번쩍…번쩍 (2회, 약 2초)
+                    hlPulse.animateTo(0f, tween(400))
+                    hlPulse.animateTo(1f, tween(600))
                 }
+                blinking = false                  // 이후 정적 테두리로 정착
             }
         }
     }
@@ -444,10 +470,14 @@ private fun CallStarApp(
             ) {
                 items(visible, key = { it.recording.id }) { row ->
                     val isChecked = row.recording.id in selected
+                    val todayUnmarked = row.rating == null &&
+                        DateUtils.isToday(row.recording.dateModifiedSec * 1000L)
                     CallRowItem(
                         row = row,
                         checked = isChecked,
-                        highlighted = row.recording.id in highlightIds,
+                        todayUnmarked = todayUnmarked,
+                        blinking = blinking,
+                        blinkAlpha = hlPulse.value,
                         onToggleSelect = {
                             selected = if (isChecked) selected - row.recording.id
                             else selected + row.recording.id
@@ -631,16 +661,23 @@ private fun ItemActionDialog(
 private fun CallRowItem(
     row: CallRow,
     checked: Boolean,
-    highlighted: Boolean,
+    todayUnmarked: Boolean,   // 오늘 통화인데 아직 미분류 → 테두리로 주목
+    blinking: Boolean,        // 알림 진입 직후 "여기요~" 깜빡임 중
+    blinkAlpha: Float,        // 깜빡임 강도(0~1)
     onToggleSelect: () -> Unit,
     onOpen: () -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
+    // 오늘 미분류면 테두리 표시. 알림 진입 직후엔 깜빡이고, 이후엔 그날 내내 정적 유지.
+    val borderAlpha = if (todayUnmarked) (if (blinking) blinkAlpha else 1f) else 0f
     val cardModifier = Modifier
         .fillMaxWidth()
         .then(
-            // 알림 안내 강조: 테두리 선 + 왼쪽 굵은 강조바로 "이 통화예요" 주목
-            if (highlighted) Modifier.border(2.dp, accent, RoundedCornerShape(12.dp))
+            if (todayUnmarked) Modifier.border(
+                2.dp,
+                accent.copy(alpha = borderAlpha.coerceIn(0f, 1f)),
+                RoundedCornerShape(12.dp),
+            )
             else Modifier
         )
         .clickable { onOpen() }   // 본문 탭 → 재생/중요/정리후보/삭제
@@ -870,7 +907,7 @@ private fun SettingsPanel(
                         style = typography.bodyMedium,
                     )
                     Text(
-                        "알림 타고 들어오면 해당 통화를 목록에서 잠깐 강조해요",
+                        "오늘 아직 분류 안 한 통화를 테두리로 표시하고, 알림 타고 오면 2번 반짝여요",
                         style = typography.bodySmall,
                         color = Color(0xFF9E9E9E),
                     )
