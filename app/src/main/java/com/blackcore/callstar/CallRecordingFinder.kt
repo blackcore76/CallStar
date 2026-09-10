@@ -58,6 +58,10 @@ object CallRecordingFinder {
         return all.firstOrNull()
     }
 
+    /** 파일명이 정확히 일치하는 통화녹음 원본을 찾는다(백업본 → 원본 역추적용). 없으면 null. */
+    fun findByDisplayName(context: Context, name: String): CallRecording? =
+        queryCallRecordings(context).firstOrNull { it.displayName == name }
+
     /**
      * 통화녹음 목록을 최신순으로 반환.
      * @param limit 0 이하이면 제한 없음.

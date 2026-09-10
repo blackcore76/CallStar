@@ -22,6 +22,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,8 +42,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +73,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -85,7 +90,9 @@ import com.blackcore.callstar.ui.DeleteRed
 import com.blackcore.callstar.ui.LaterGray
 import com.blackcore.callstar.ui.StarGold
 import com.blackcore.callstar.ui.ThemeMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -199,6 +206,7 @@ private fun CallStarApp(
     DisposableEffect(Unit) { onDispose { player.stop() } }
 
     var showSettings by remember { mutableStateOf(false) }
+    var showBackup by remember { mutableStateOf(false) }
     // 알림 타고 들어왔을 때 "이 통화들이에요" 강조할 id 집합 + 세션 1회 판단 플래그
     var hlConsumedSignal by remember { mutableStateOf(0L) }
     var blinking by remember { mutableStateOf(false) }   // 알림 진입 시 "여기요~" 깜빡임 진행 중
@@ -315,6 +323,15 @@ private fun CallStarApp(
         return
     }
 
+    // 백업함 전용 화면 (설정과 분리된 전체화면 뷰어)
+    if (showBackup) {
+        BackupBrowser(
+            modifier = modifier,
+            onBack = { showBackup = false; refresh() },   // 원본 삭제 반영 위해 복귀 시 목록 갱신
+        )
+        return
+    }
+
     val visible = if (laterOnly) rows.filter { it.rating == Rating.LATER } else rows
     val listState = rememberLazyListState()
 
@@ -419,6 +436,7 @@ private fun CallStarApp(
                 onAddKeyword = { autoKeywords = AppPrefs.addAutoMarkKeyword(ctx, it) },
                 onRemoveKeyword = { autoKeywords = AppPrefs.removeAutoMarkKeyword(ctx, it) },
                 onPickContact = { contactLauncher.launch(null) },
+                onOpenBackup = { showSettings = false; showBackup = true },
                 modifier = Modifier.weight(1f),
             )
         } else {
@@ -761,6 +779,7 @@ private fun SettingsPanel(
     onAddKeyword: (String) -> Unit,
     onRemoveKeyword: (String) -> Unit,
     onPickContact: () -> Unit,
+    onOpenBackup: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -770,27 +789,41 @@ private fun SettingsPanel(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("통화 후 별점 표시", style = typography.titleMedium)
+            // ══════════ 기본 기능 ══════════
+            Text("통화 후 알림 방식", style = typography.titleMedium)
+            ChoiceRow(
+                selected = !overlayMode,
+                title = "알림으로 남기기 (권장)",
+                desc = "잠금화면·알림창에 남아, 나중에 봐도 바로 마킹",
+                onClick = { if (overlayMode) onToggleOverlayMode() },
+            )
+            ChoiceRow(
+                selected = overlayMode,
+                title = "즉시 팝업",
+                desc = "통화 끝나면 화면에 바로 팝업 (오버레이 권한 필요)",
+                onClick = { if (!overlayMode) onToggleOverlayMode() },
+            )
+            if (overlayMode && !canOverlay) {
+                OutlinedButton(onClick = onGrantOverlay, modifier = Modifier.fillMaxWidth()) {
+                    Text("오버레이 권한 켜기")
+                }
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Text("알림 안내 강조", style = typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
+                    Text(if (highlightEnabled) "켜짐" else "꺼짐", style = typography.bodyMedium)
                     Text(
-                        if (overlayMode) "즉시 팝업(오버레이)" else "알림 (권장)",
-                        style = typography.bodyMedium,
-                    )
-                    Text(
-                        if (overlayMode) "통화 끝나면 화면에 바로 팝업"
-                        else "알림창·잠금화면에 남아 나중에도 마킹",
+                        "오늘 아직 분류 안 한 통화를 테두리로 표시하고, 알림 타고 오면 2번 반짝여요",
                         style = typography.bodySmall,
                         color = Color(0xFF9E9E9E),
                     )
                 }
-                Switch(checked = overlayMode, onCheckedChange = { onToggleOverlayMode() })
-            }
-            if (overlayMode && !canOverlay) {
-                OutlinedButton(onClick = onGrantOverlay) { Text("오버레이 권한 켜기") }
+                Switch(checked = highlightEnabled, onCheckedChange = { onToggleHighlight() })
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text("화면 테마", style = typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { m ->
@@ -804,118 +837,400 @@ private fun SettingsPanel(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            Text("중요 통화 백업 (프리미엄)", style = typography.titleMedium)
-            Text(
-                "★중요로 표시하면 원본은 그대로 두고 지정 폴더로 복사돼요. " +
-                    "잡통화 즉시 삭제는 무료, 자동 백업은 프리미엄.",
-                style = typography.bodySmall,
-                color = Color(0xFF757575),
-            )
-            Text(
-                "백업 폴더: " + (backupFolder ?: "미지정"),
-                style = typography.bodyMedium,
-            )
-            OutlinedButton(onClick = onPickFolder) { Text("백업 폴더 지정") }
-
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (isPremium) "프리미엄: 켜짐" else "프리미엄: 꺼짐",
-                    style = typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(checked = isPremium, onCheckedChange = { onTogglePremium() })
-            }
-            Text(
-                "※ 지금은 임시 토글(결제 미연동). 나중에 Play 결제로 대체.",
-                style = typography.bodySmall,
-                color = Color(0xFF9E9E9E),
-            )
-
-            Spacer(Modifier.height(8.dp))
-            Text("자동 중요 번호/이름 (프리미엄)", style = typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (autoMarkEnabled) "켜짐" else "꺼짐",
-                        style = typography.bodyMedium,
-                    )
-                    Text(
-                        "등록한 이름/번호와의 통화는 묻지 않고 ★중요로 표시(+백업)해요",
-                        style = typography.bodySmall,
-                        color = Color(0xFF9E9E9E),
-                    )
-                }
-                Switch(checked = autoMarkEnabled, onCheckedChange = { onToggleAutoMark() })
-            }
-            if (!isPremium) {
-                Text(
-                    "프리미엄을 켜야 실제로 동작해요.",
-                    style = typography.bodySmall,
-                    color = Color(0xFF757575),
-                )
-            }
-            // 연락처에서 선택(권한 없이 시스템 선택기) — 저장된 이름 정확히 등록
-            OutlinedButton(onClick = onPickContact, modifier = Modifier.fillMaxWidth()) {
-                Text("📇 연락처에서 선택")
-            }
-            // 직접 입력(미저장 번호 등)
-            var kwInput by remember { mutableStateOf("") }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = kwInput,
-                    onValueChange = { kwInput = it },
-                    singleLine = true,
-                    label = { Text("직접 입력 (이름·번호)") },
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = { onAddKeyword(kwInput); kwInput = "" },
-                    enabled = kwInput.isNotBlank(),
-                ) { Text("추가") }
-            }
-            // 등록 목록
-            if (autoKeywords.isEmpty()) {
-                Text(
-                    "아직 등록된 항목이 없어요. 예: 큰형, 회사, 01012345678",
-                    style = typography.bodySmall,
-                    color = Color(0xFF9E9E9E),
-                )
-            } else {
-                autoKeywords.forEach { kw ->
+            // ══════════ 프리미엄 기능 (별도 박스) ══════════
+            Spacer(Modifier.height(12.dp))
+            val accent = MaterialTheme.colorScheme.primary
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = accent.copy(alpha = 0.06f)),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.35f)),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("• $kw", style = typography.bodyMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { onRemoveKeyword(kw) }) { Text("삭제") }
+                        Text(
+                            "⭐ 프리미엄 기능",
+                            style = typography.titleMedium,
+                            color = accent,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(checked = isPremium, onCheckedChange = { onTogglePremium() })
                     }
-                }
-            }
-            Text(
-                "연락처에서 고르면 그 이름과 ‘정확히 일치’하는 통화만 자동 처리돼요(비슷한 이름 오작동 없음). " +
-                    "저장 안 된 번호는 직접 입력하세요.",
-                style = typography.bodySmall,
-                color = Color(0xFF757575),
-            )
-
-            Spacer(Modifier.height(8.dp))
-            Text("알림 안내 강조", style = typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
                     Text(
-                        if (highlightEnabled) "켜짐" else "꺼짐",
-                        style = typography.bodyMedium,
-                    )
-                    Text(
-                        "오늘 아직 분류 안 한 통화를 테두리로 표시하고, 알림 타고 오면 2번 반짝여요",
+                        if (isPremium) "켜짐 · 아래 기능이 동작해요"
+                        else "꺼짐 · 켜면 아래 기능이 동작해요 (지금은 임시 토글, 결제 미연동)",
                         style = typography.bodySmall,
                         color = Color(0xFF9E9E9E),
                     )
+
+                    HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                    // 자동 백업
+                    Text("중요 통화 자동 백업", style = typography.titleSmall)
+                    Text(
+                        "★중요로 표시하면 원본은 그대로 두고 지정 폴더로 복사돼요.",
+                        style = typography.bodySmall,
+                        color = Color(0xFF757575),
+                    )
+                    Text("백업 폴더: " + (backupFolder ?: "미지정"), style = typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = onPickFolder, modifier = Modifier.weight(1f)) {
+                            Text("백업 폴더 지정")
+                        }
+                        Button(
+                            onClick = onOpenBackup,
+                            enabled = backupFolder != null,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("백업한 통화 보기") }
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                    // 자동 중요 번호/이름
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("자동 중요 번호/이름", style = typography.titleSmall)
+                            Text(
+                                "등록한 이름/번호와의 통화는 묻지 않고 ★중요로 표시(+백업)",
+                                style = typography.bodySmall,
+                                color = Color(0xFF9E9E9E),
+                            )
+                        }
+                        Switch(checked = autoMarkEnabled, onCheckedChange = { onToggleAutoMark() })
+                    }
+                    OutlinedButton(onClick = onPickContact, modifier = Modifier.fillMaxWidth()) {
+                        Text("📇 연락처에서 선택")
+                    }
+                    var kwInput by remember { mutableStateOf("") }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = kwInput,
+                            onValueChange = { kwInput = it },
+                            singleLine = true,
+                            label = { Text("직접 입력 (이름·번호)") },
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = { onAddKeyword(kwInput); kwInput = "" },
+                            enabled = kwInput.isNotBlank(),
+                        ) { Text("추가") }
+                    }
+                    if (autoKeywords.isEmpty()) {
+                        Text(
+                            "아직 등록된 항목이 없어요. 예: 큰형, 회사, 01012345678",
+                            style = typography.bodySmall,
+                            color = Color(0xFF9E9E9E),
+                        )
+                    } else {
+                        autoKeywords.forEach { kw ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("• $kw", style = typography.bodyMedium, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { onRemoveKeyword(kw) }) { Text("삭제") }
+                            }
+                        }
+                    }
+                    Text(
+                        "연락처에서 고르면 그 이름과 ‘정확히 일치’하는 통화만 자동 처리돼요. 저장 안 된 번호는 직접 입력하세요.",
+                        style = typography.bodySmall,
+                        color = Color(0xFF757575),
+                    )
                 }
-                Switch(checked = highlightEnabled, onCheckedChange = { onToggleHighlight() })
             }
         }
     }
+}
+
+/** 설정의 라디오형 선택 카드 (알림 방식 등 이지선다). 고른 쪽이 강조된다. */
+@Composable
+private fun ChoiceRow(
+    selected: Boolean,
+    title: String,
+    desc: String,
+    onClick: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Card(
+        Modifier.fillMaxWidth().clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) accent.copy(alpha = 0.12f) else Color.Transparent,
+        ),
+        border = if (selected) BorderStroke(2.dp, accent)
+        else BorderStroke(1.dp, Color(0x33808080)),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = selected, onClick = onClick)
+            Spacer(Modifier.width(2.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = typography.bodyLarge)
+                Text(desc, style = typography.bodySmall, color = Color(0xFF9E9E9E))
+            }
+        }
+    }
+}
+
+/** 백업 폴더 안의 한 파일. */
+private data class BackupFile(
+    val doc: DocumentFile,
+    val name: String,
+    val sizeBytes: Long,
+    val modifiedMs: Long,
+)
+
+/**
+ * 백업함 — 프리미엄 백업 폴더 전용 뷰어(설정과 분리된 전체화면).
+ * SAF 영구권한으로 폴더를 읽어 목록 표시 → 재생 청취 → 필요 없으면 백업본만 삭제.
+ * (원본 통화녹음과 평가는 건드리지 않는다. 여기 삭제 = 백업 복사본만 제거.)
+ */
+@Composable
+private fun BackupBrowser(modifier: Modifier = Modifier, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val treeStr = remember { AppPrefs.backupTreeUri(ctx) }
+    val player = remember { AudioPlayer() }
+    DisposableEffect(Unit) { onDispose { player.stop() } }
+
+    var files by remember { mutableStateOf<List<BackupFile>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var reload by remember { mutableStateOf(0) }
+    var query by remember { mutableStateOf("") }
+    var activeUri by remember { mutableStateOf<String?>(null) }   // 펼쳐진(선택된) 행
+    var playing by remember { mutableStateOf(false) }
+    var posMs by remember { mutableStateOf(0) }
+    var durMs by remember { mutableStateOf(0) }
+    var confirmDelete by remember { mutableStateOf<BackupFile?>(null) }   // 원본 없는 경우: 백업본만 삭제 확인
+    // 원본까지 지울 때 쓰는 시스템 삭제창 대기 상태 (백업본, 원본 id)
+    var pendingFull by remember { mutableStateOf<Pair<BackupFile, Long>?>(null) }
+
+    fun stopPlay() { player.stop(); playing = false; posMs = 0; durMs = 0 }
+
+    // 원본(MediaStore) 삭제 시스템 확인창 결과
+    val deleteLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        val pend = pendingFull
+        pendingFull = null
+        if (pend != null && result.resultCode == android.app.Activity.RESULT_OK) {
+            val (bf, originalId) = pend
+            if (activeUri == bf.doc.uri.toString()) stopPlay()
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    try { bf.doc.delete() } catch (_: Exception) {}   // 백업본 조용히 삭제
+                }
+                CallListRepository.forgetRatings(ctx, listOf(originalId))   // ★중요 평가도 해제
+                files = files.filterNot { it.doc.uri == bf.doc.uri }
+            }
+        }
+    }
+
+    // 🗑 삭제 요청: 원본 있으면 시스템창(원본+백업+평가), 없으면 백업본만 확인 후 삭제
+    fun requestFullDelete(f: BackupFile) {
+        scope.launch {
+            val original = withContext(Dispatchers.IO) {
+                CallRecordingFinder.findByDisplayName(ctx, f.name)
+            }
+            if (original != null) {
+                pendingFull = f to original.id
+                val pi = MediaStore.createDeleteRequest(ctx.contentResolver, listOf(original.uri))
+                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            } else {
+                confirmDelete = f   // 원본 없음(백업본이 유일본) → 자체 확인창
+            }
+        }
+    }
+
+    LaunchedEffect(reload) {
+        loading = true
+        files = withContext(Dispatchers.IO) {
+            if (treeStr == null) return@withContext emptyList()
+            try {
+                DocumentFile.fromTreeUri(ctx, Uri.parse(treeStr))
+                    ?.listFiles()
+                    ?.filter { it.isFile && isAudioBackup(it) }   // 통화녹음(오디오)만 — 폴더에 다른 파일 섞여도 무시
+                    ?.map { BackupFile(it, it.name ?: "(이름 없음)", it.length(), it.lastModified()) }
+                    ?.sortedByDescending { it.modifiedMs }
+                    ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        loading = false
+    }
+
+    LaunchedEffect(playing) {
+        while (playing) {
+            posMs = player.positionMs(); durMs = player.durationMs()
+            kotlinx.coroutines.delay(250)
+        }
+    }
+
+    val filtered = if (query.isBlank()) files
+        else files.filter { it.name.contains(query.trim(), ignoreCase = true) }
+
+    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { stopPlay(); onBack() }) {
+                Text("←", style = typography.titleLarge)
+            }
+            Spacer(Modifier.width(2.dp))
+            Column(Modifier.weight(1f)) {
+                Text("백업함", style = typography.headlineSmall)
+                Text(
+                    "★중요로 백업된 통화 · 들어보고 필요 없으면 삭제",
+                    style = typography.bodySmall,
+                    color = Color(0xFF9E9E9E),
+                )
+            }
+            IconButton(onClick = { reload++ }, enabled = !loading) {
+                Text(if (loading) "…" else "↻", style = typography.titleLarge)
+            }
+        }
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            singleLine = true,
+            label = { Text("이름 검색") },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        )
+
+        when {
+            treeStr == null -> CenterNote("백업 폴더가 지정되지 않았어요.\n설정에서 먼저 지정하세요.")
+            loading -> CenterNote("불러오는 중…")
+            filtered.isEmpty() -> CenterNote(
+                if (files.isEmpty()) "백업된 통화가 없어요." else "검색 결과가 없어요.",
+            )
+            else -> LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(filtered, key = { it.doc.uri.toString() }) { f ->
+                    val uriStr = f.doc.uri.toString()
+                    val isActive = activeUri == uriStr
+                    Card(
+                        Modifier.fillMaxWidth().clickable {
+                            stopPlay()
+                            activeUri = if (isActive) null else uriStr
+                        },
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                f.name.removePrefix("통화 녹음 ").removePrefix("통화 "),
+                                style = typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                "${formatYMD(f.modifiedMs / 1000)} · ${fmtSize(f.sizeBytes)}",
+                                style = typography.bodySmall,
+                                color = Color(0xFF9E9E9E),
+                            )
+                            if (isActive) {
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    TextButton(onClick = {
+                                        if (playing) {
+                                            player.stop(); playing = false; posMs = 0
+                                        } else {
+                                            player.play(ctx, f.doc.uri) { playing = false; posMs = 0 }
+                                            playing = true
+                                        }
+                                    }) { Text(if (playing) "⏸ 정지" else "▶ 재생하기") }
+                                    TextButton(onClick = { requestFullDelete(f) }) {
+                                        Text("🗑 삭제", color = DeleteRed)
+                                    }
+                                }
+                                if (playing || posMs > 0) {
+                                    Slider(
+                                        value = if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f,
+                                        onValueChange = { frac ->
+                                            if (durMs > 0) {
+                                                val t = (frac * durMs).toInt()
+                                                player.seekTo(t); posMs = t
+                                            }
+                                        },
+                                    )
+                                    Text(
+                                        "${fmtClock(posMs)} / ${fmtClock(durMs)}",
+                                        style = typography.bodySmall,
+                                        color = Color(0xFF9E9E9E),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(8.dp)) }
+            }
+        }
+    }
+
+    // 원본이 이미 없는 경우(백업본이 유일본): 자체 확인 후 백업본만 삭제
+    confirmDelete?.let { f ->
+        val shortName = f.name.removePrefix("통화 녹음 ").removePrefix("통화 ")
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("백업본 삭제") },
+            text = {
+                Text(
+                    "‘$shortName’ 을(를) 삭제할까요?\n" +
+                        "원본은 이미 없고 이 백업본이 유일해요. 되돌릴 수 없어요.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = f
+                    confirmDelete = null
+                    if (activeUri == target.doc.uri.toString()) stopPlay()
+                    scope.launch {
+                        val ok = withContext(Dispatchers.IO) {
+                            try { target.doc.delete() } catch (e: Exception) { false }
+                        }
+                        if (ok) files = files.filterNot { it.doc.uri == target.doc.uri }
+                        else reload++   // 실패 시 재조회로 상태 맞춤
+                    }
+                }) { Text("삭제", color = DeleteRed) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) { Text("취소") }
+            },
+        )
+    }
+}
+
+/** 백업함의 빈/로딩/무결과 안내 (가운데 정렬). */
+@Composable
+private fun ColumnScope.CenterNote(text: String) {
+    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Text(
+            text,
+            style = typography.bodyMedium,
+            color = Color(0xFF9E9E9E),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** 백업 폴더에 다른 파일이 섞여 있어도 통화녹음(오디오)만 골라낸다. */
+private fun isAudioBackup(doc: DocumentFile): Boolean {
+    if (doc.type?.startsWith("audio/") == true) return true
+    val n = (doc.name ?: "").lowercase()
+    return n.endsWith(".m4a") || n.endsWith(".mp3") || n.endsWith(".amr") ||
+        n.endsWith(".aac") || n.endsWith(".wav") || n.endsWith(".3gp") || n.endsWith(".ogg")
+}
+
+/** 파일 크기 사람이 읽기 좋게. */
+private fun fmtSize(bytes: Long): String {
+    if (bytes <= 0) return "0B"
+    val kb = bytes / 1024.0
+    return if (kb < 1024) "%.0fKB".format(kb) else "%.1fMB".format(kb / 1024.0)
 }
 
 /** 연락처 선택기에서 받은 URI로 표시 이름만 조회(READ_CONTACTS 불필요 — 선택 항목에 임시 접근 허용). */
