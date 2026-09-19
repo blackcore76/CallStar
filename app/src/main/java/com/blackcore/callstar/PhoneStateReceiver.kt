@@ -102,7 +102,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
                 if (fresh) {
                     found[0] = true
 
-                    // ★ 자동 중요 마킹(프리미엄): 등록된 이름/번호와 파일명이 매칭되면
+                    // ★ 자동 중요 마킹(플러스): 등록된 이름/번호와 파일명이 매칭되면
                     //   묻지 않고 바로 중요로 표시(+백업). 별점 요청 알림/팝업은 생략.
                     val autoKw = AutoMarkRules.autoKeepMatch(appContext, rec!!.displayName)
                     if (autoKw != null) {

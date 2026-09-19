@@ -13,6 +13,7 @@ import android.provider.ContactsContract
 import android.provider.Settings
 import android.text.format.DateUtils
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
@@ -287,7 +288,7 @@ private fun CallStarApp(
         deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
     }
 
-    // 선택한 여러 통화에 별점 일괄 적용 (중요면 프리미엄 백업도 각각 시도)
+    // 선택한 여러 통화에 별점 일괄 적용 (중요면 플러스 백업도 각각 시도)
     fun applyRatingToSelected(rating: Int) {
         val recs = rows.filter { it.recording.id in selected }.map { it.recording }
         if (recs.isEmpty()) return
@@ -317,6 +318,9 @@ private fun CallStarApp(
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
     LaunchedEffect(granted) { if (granted) refresh() }
+
+    // 설정 화면이 열려 있을 때 뒤로가기 → 앱 종료 대신 설정만 닫기
+    BackHandler(enabled = showSettings) { showSettings = false }
 
     if (!granted) {
         PermissionGate(Modifier.then(modifier)) { permLauncher.launch(requiredPermissions()) }
@@ -837,7 +841,7 @@ private fun SettingsPanel(
                 }
             }
 
-            // ══════════ 프리미엄 기능 (별도 박스) ══════════
+            // ══════════ 플러스 기능 (별도 박스) ══════════
             Spacer(Modifier.height(12.dp))
             val accent = MaterialTheme.colorScheme.primary
             Card(
@@ -848,7 +852,7 @@ private fun SettingsPanel(
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "⭐ 프리미엄 기능",
+                            "⭐ 플러스 기능",
                             style = typography.titleMedium,
                             color = accent,
                             modifier = Modifier.weight(1f),
@@ -880,7 +884,7 @@ private fun SettingsPanel(
                             onClick = onOpenBackup,
                             enabled = backupFolder != null,
                             modifier = Modifier.weight(1f),
-                        ) { Text("백업한 통화 보기") }
+                        ) { Text("백업 통화 보기") }
                     }
 
                     HorizontalDivider(Modifier.padding(vertical = 2.dp))
@@ -980,7 +984,7 @@ private data class BackupFile(
 )
 
 /**
- * 백업함 — 프리미엄 백업 폴더 전용 뷰어(설정과 분리된 전체화면).
+ * 백업함 — 플러스 백업 폴더 전용 뷰어(설정과 분리된 전체화면).
  * SAF 영구권한으로 폴더를 읽어 목록 표시 → 재생 청취 → 필요 없으면 백업본만 삭제.
  * (원본 통화녹음과 평가는 건드리지 않는다. 여기 삭제 = 백업 복사본만 제거.)
  */
@@ -1005,6 +1009,9 @@ private fun BackupBrowser(modifier: Modifier = Modifier, onBack: () -> Unit) {
     var pendingFull by remember { mutableStateOf<Pair<BackupFile, Long>?>(null) }
 
     fun stopPlay() { player.stop(); playing = false; posMs = 0; durMs = 0 }
+
+    // 시스템 뒤로가기/제스처 → 앱 종료 대신 메인 목록으로 복귀
+    BackHandler { stopPlay(); onBack() }
 
     // 원본(MediaStore) 삭제 시스템 확인창 결과
     val deleteLauncher = rememberLauncherForActivityResult(

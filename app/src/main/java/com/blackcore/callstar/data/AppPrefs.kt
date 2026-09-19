@@ -4,7 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 
 /**
- * 로컬 설정: 프리미엄 여부(임시, 나중에 Play Billing 으로 대체), 백업 폴더 SAF 트리 URI.
+ * 로컬 설정: 플러스 여부(임시, 나중에 Play Billing 으로 대체), 백업 폴더 SAF 트리 URI.
  */
 object AppPrefs {
     private const val PREFS = "callstar_prefs"
@@ -55,12 +55,12 @@ object AppPrefs {
     fun resetHighlightShownCount(context: Context) =
         sp(context).edit().putInt(K_HL_SHOWN, 0).apply()
 
-    // ── 자동 중요 마킹(프리미엄): 특정 이름/번호 키워드 목록 ──────────────
+    // ── 자동 중요 마킹(플러스): 특정 이름/번호 키워드 목록 ──────────────
 
     private const val K_AUTOMARK_ENABLED = "automark_enabled"
     private const val K_AUTOMARK_LIST = "automark_keywords"
 
-    /** 자동 중요 마킹 사용 여부(기본 켜짐; 실제 동작은 프리미엄 + 목록 있을 때). */
+    /** 자동 중요 마킹 사용 여부(기본 켜짐; 실제 동작은 플러스 + 목록 있을 때). */
     fun autoMarkEnabled(context: Context): Boolean = sp(context).getBoolean(K_AUTOMARK_ENABLED, true)
     fun setAutoMarkEnabled(context: Context, value: Boolean) =
         sp(context).edit().putBoolean(K_AUTOMARK_ENABLED, value).apply()

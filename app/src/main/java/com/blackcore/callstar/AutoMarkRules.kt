@@ -48,7 +48,7 @@ object AutoMarkRules {
         return null
     }
 
-    /** 이 통화가 자동 중요 대상인지(프리미엄 + 기능 켜짐 + 목록 매칭). 반환: 매칭 키워드 or null */
+    /** 이 통화가 자동 중요 대상인지(플러스 + 기능 켜짐 + 목록 매칭). 반환: 매칭 키워드 or null */
     fun autoKeepMatch(context: Context, displayName: String): String? {
         if (!AppPrefs.isPremium(context)) return null
         if (!AppPrefs.autoMarkEnabled(context)) return null

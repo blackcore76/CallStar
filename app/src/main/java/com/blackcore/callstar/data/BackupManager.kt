@@ -7,7 +7,7 @@ import androidx.documentfile.provider.DocumentFile
 import com.blackcore.callstar.CallRecording
 
 /**
- * [프리미엄] "중요(★)" 로 표시한 통화녹음을 사용자가 지정한 폴더로 복사(백업).
+ * [플러스] "중요(★)" 로 표시한 통화녹음을 사용자가 지정한 폴더로 복사(백업).
  * - 원본은 그대로 둔다(복사). 삼성 보존정책/수동삭제로부터 중요 통화 보호.
  * - SAF(트리 URI, 영구 권한)로 추가 저장권한 없이 기록. 오버레이(백그라운드)에서 조용히 동작.
  */
@@ -16,7 +16,7 @@ object BackupManager {
     private const val TAG = "CallStar/Backup"
 
     sealed class Result(val msg: String) {
-        object NotPremium : Result("프리미엄 아님 — 백업 생략")
+        object NotPremium : Result("플러스 아님 — 백업 생략")
         object NoFolder : Result("백업 폴더 미지정")
         object AlreadyExists : Result("이미 백업됨")
         data class Ok(val name: String) : Result("백업 완료: $name")

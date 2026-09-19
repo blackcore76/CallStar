@@ -43,7 +43,7 @@ object RatingStore {
                 )
                 Log.d(TAG, "저장 완료: id=${recording.id}, rating=$rating, ${recording.displayName}")
 
-                // 중요(★)면 프리미엄 백업 시도 (내부에서 프리미엄/폴더 자격 검사)
+                // 중요(★)면 플러스 백업 시도 (내부에서 플러스/폴더 자격 검사)
                 if (rating == Rating.KEEP) {
                     val r = BackupManager.backup(app, recording)
                     Log.d(TAG, r.msg)

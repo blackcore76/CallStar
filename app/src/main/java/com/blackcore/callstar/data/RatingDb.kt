@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.Flow
 
 /** 별점 값 정의: 중요(보관/백업) 3점, 정리후보 1점. (0점은 삭제 버튼으로 대체하여 폐지) */
 object Rating {
-    const val KEEP = 3    // 중요 — 보관, 프리미엄이면 지정 폴더로 백업
+    const val KEEP = 3    // 중요 — 보관, 플러스이면 지정 폴더로 백업
     const val LATER = 1   // 정리후보 — 나중에 목록에서 배치 삭제
 }
 

@@ -139,7 +139,7 @@ object RatingOverlay {
         }
         val sub = when {
             rating == Rating.KEEP && backupOn -> "지정 폴더에 백업됨"
-            rating == Rating.KEEP -> "백업은 프리미엄 (설정에서 폴더 지정)"
+            rating == Rating.KEEP -> "백업은 플러스 기능 (설정에서 폴더 지정)"
             else -> "저장됨"
         }
         r.addView(TextView(ctx).apply {
