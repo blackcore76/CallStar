@@ -15,7 +15,15 @@ object AppPrefs {
     private fun sp(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun isPremium(context: Context): Boolean = sp(context).getBoolean(K_PREMIUM, false)
+    /**
+     * 플러스 무료 공개 스위치. true 면 저장된 값과 상관없이 플러스 기능이 항상 동작하고,
+     * 설정 화면에서 토글이 숨겨진다. 결제(Play Billing)를 붙일 때 false 로 바꾸고
+     * isPremium 이 결제 상태를 확인하게 하면 된다.
+     */
+    const val PLUS_FREE = true
+
+    fun isPremium(context: Context): Boolean =
+        PLUS_FREE || sp(context).getBoolean(K_PREMIUM, false)
     fun setPremium(context: Context, value: Boolean) =
         sp(context).edit().putBoolean(K_PREMIUM, value).apply()
 

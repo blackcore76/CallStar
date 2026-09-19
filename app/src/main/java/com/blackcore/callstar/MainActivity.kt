@@ -857,11 +857,17 @@ private fun SettingsPanel(
                             color = accent,
                             modifier = Modifier.weight(1f),
                         )
-                        Switch(checked = isPremium, onCheckedChange = { onTogglePremium() })
+                        // 무료 공개 중에는 토글을 숨긴다(결제 붙일 때 PLUS_FREE=false 로 복귀)
+                        if (!AppPrefs.PLUS_FREE) {
+                            Switch(checked = isPremium, onCheckedChange = { onTogglePremium() })
+                        }
                     }
                     Text(
-                        if (isPremium) "켜짐 · 아래 기능이 동작해요"
-                        else "꺼짐 · 켜면 아래 기능이 동작해요 (지금은 임시 토글, 결제 미연동)",
+                        when {
+                            AppPrefs.PLUS_FREE -> "지금은 모두 무료로 열려 있어요"
+                            isPremium -> "켜짐 · 아래 기능이 동작해요"
+                            else -> "꺼짐 · 켜면 아래 기능이 동작해요"
+                        },
                         style = typography.bodySmall,
                         color = Color(0xFF9E9E9E),
                     )
@@ -926,10 +932,23 @@ private fun SettingsPanel(
                             color = Color(0xFF9E9E9E),
                         )
                     } else {
-                        autoKeywords.forEach { kw ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("• $kw", style = typography.bodyMedium, modifier = Modifier.weight(1f))
-                                TextButton(onClick = { onRemoveKeyword(kw) }) { Text("삭제") }
+                        // 목록은 줄 간격 없이 촘촘하게(항목이 많아도 설정이 길어지지 않게)
+                        Column {
+                            autoKeywords.forEach { kw ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text("• $kw", style = typography.bodyMedium, modifier = Modifier.weight(1f))
+                                    Text(
+                                        "삭제",
+                                        style = typography.labelLarge,
+                                        color = accent,
+                                        modifier = Modifier
+                                            .clickable { onRemoveKeyword(kw) }
+                                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                                    )
+                                }
                             }
                         }
                     }
