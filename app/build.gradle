@@ -12,12 +12,26 @@ android {
         applicationId "com.blackcore.callstar"
         minSdk 30
         targetSdk 36
-        versionCode 40
-        versionName "0.24.2"
+        versionCode 100
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            // 서명 정보는 local.properties(커밋 안 됨)에서 읽는다. 키 파일(*.jks)도 커밋 금지.
+            def props = new Properties()
+            def localFile = rootProject.file('local.properties')
+            if (localFile.exists()) { props.load(localFile.newDataInputStream()) }
+            storeFile file(props.getProperty('RELEASE_STORE_FILE', '../callstar-release.jks'))
+            storePassword props.getProperty('RELEASE_STORE_PASSWORD', '')
+            keyAlias props.getProperty('RELEASE_KEY_ALIAS', '')
+            keyPassword props.getProperty('RELEASE_KEY_PASSWORD', '')
+        }
     }
 
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

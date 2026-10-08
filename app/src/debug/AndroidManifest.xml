@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 디버그 빌드 전용: 스크린샷용으로 통화 직후 알림을 강제로 띄운다. release 에는 포함되지 않음. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name=".DebugNotifyReceiver"
+            android:exported="true" />
+    </application>
+</manifest>

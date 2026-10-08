@@ -515,6 +515,7 @@ private fun CallStarApp(
         if (selected.isNotEmpty()) {
             SelectionBar(
                 count = selected.size,
+                totalBytes = rows.filter { it.recording.id in selected }.sumOf { it.recording.sizeBytes },
                 onClear = { selected = emptySet() },
                 onKeep = { applyRatingToSelected(Rating.KEEP) },
                 onLater = { applyRatingToSelected(Rating.LATER) },
@@ -555,6 +556,7 @@ private fun CallStarApp(
 @Composable
 private fun SelectionBar(
     count: Int,
+    totalBytes: Long,
     onClear: () -> Unit,
     onKeep: () -> Unit,
     onLater: () -> Unit,
@@ -564,7 +566,7 @@ private fun SelectionBar(
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${count}건 선택됨", style = typography.bodyMedium)
+            Text("${count}건 선택됨 · ${fmtSize(totalBytes)}", style = typography.bodyMedium)
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onClear) { Text("해제") }
         }
@@ -1291,9 +1293,11 @@ private fun PermissionGate(modifier: Modifier = Modifier, onRequest: () -> Unit)
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(24.dp))
-        Text("CallStar", style = typography.headlineSmall)
+        Text("통화서랍", style = typography.headlineSmall)
         Text(
-            "통화 상태 감지와 통화녹음 읽기 권한이 필요해요.",
+            "통화가 끝난 걸 알아채고, 갤럭시가 저장한 통화녹음을 목록으로 보여주려면 " +
+                "전화 상태와 오디오 읽기 권한이 필요해요.\n\n" +
+                "통화서랍은 통화를 녹음하지 않고, 녹음 파일을 어디에도 보내지 않아요.",
             style = typography.bodyMedium,
         )
         Button(onClick = onRequest) { Text("권한 요청") }

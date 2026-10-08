@@ -72,7 +72,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
     private fun handleCallEnded(context: Context) {
         if (!hasAudioReadPermission(context)) {
             Log.w(TAG, "오디오 읽기 권한 없음 → 조회 불가")
-            showToast(context, "CallStar: 녹음 접근 권한이 없어요")
+            showToast(context, "통화서랍: 녹음 접근 권한이 없어요")
             return
         }
 
