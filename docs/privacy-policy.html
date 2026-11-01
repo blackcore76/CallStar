@@ -39,7 +39,7 @@
     <!-- 한국어 -->
     <div class="ko">
         <h1>통화서랍 — 개인정보처리방침</h1>
-        <p class="subtitle">최종 업데이트: 2026년 9월 2일</p>
+        <p class="subtitle">최종 업데이트: 2026년 11월 1일</p>
 
         <p><strong>통화서랍</strong>("본 앱")은 이용자의 개인정보를 소중히 여기며, 어떠한 개인정보도 수집·전송·공유하지 않습니다. 본 앱의 모든 처리는 이용자의 기기 안에서만 이루어집니다.</p>
 
@@ -56,15 +56,18 @@
         <div class="section">
             <h2>3. 권한 사용 목적</h2>
             <ul>
-                <li><strong>전화 상태(READ_PHONE_STATE):</strong> 통화 <strong>종료 시점</strong>을 감지해 별점 팝업을 띄우기 위해서만 사용합니다. 전화번호·통화기록을 읽거나 저장하지 않습니다.</li>
+                <li><strong>전화 상태(READ_PHONE_STATE):</strong> 통화 <strong>종료 시점</strong>을 감지해 중요도 표시 알림(또는 팝업)을 띄우기 위해서만 사용합니다. 전화번호·통화기록을 읽거나 저장하지 않습니다.</li>
                 <li><strong>오디오/미디어 파일 읽기(READ_MEDIA_AUDIO · READ_EXTERNAL_STORAGE):</strong> 기기에 저장된 통화녹음 파일 목록과 재생을 위해 사용합니다.</li>
-                <li><strong>다른 앱 위에 표시(SYSTEM_ALERT_WINDOW):</strong> 통화 종료 직후 별점 팝업을 화면에 표시하기 위해 사용합니다.</li>
+                <li><strong>알림(POST_NOTIFICATIONS):</strong> 통화 직후 중요도 표시 알림과 자동 정리 결과 알림을 보여주기 위해 사용합니다.</li>
+                <li><strong>다른 앱 위에 표시(SYSTEM_ALERT_WINDOW, 선택):</strong> 알림 대신 즉시 팝업 방식을 고른 경우에만 통화 종료 직후 팝업을 표시하기 위해 사용합니다.</li>
+                <li><strong>미디어 관리(MANAGE_MEDIA, 선택·플러스):</strong> 이용자가 자동 정리를 켜고 이 권한을 직접 허용한 경우, 정해진 시간에 확인창 없이 정리후보 통화녹음을 안드로이드 휴지통으로 옮기기 위해 사용합니다.</li>
+                <li><strong>부팅 완료 수신(RECEIVE_BOOT_COMPLETED):</strong> 휴대폰을 다시 켠 뒤 자동 정리 예약을 복구하기 위해 사용합니다.</li>
             </ul>
         </div>
 
         <div class="section">
             <h2>4. 정보의 저장 위치</h2>
-            <p>이용자가 매긴 별점 등의 정보는 <strong>기기 내부의 로컬 데이터베이스</strong>에만 저장됩니다. 플러스 백업 기능은 이용자가 직접 지정한 <strong>기기 내 폴더</strong>로 녹음 파일을 복사하며, 외부로 전송하지 않습니다. 플러스 자동 중요 표시를 위해 이용자가 등록한 이름·번호 키워드도 기기 내부에만 저장되며, 연락처에서 선택할 때는 이용자가 고른 이름만 사용하고 연락처 목록 전체에는 접근하지 않습니다. 통화녹음 원본의 삭제는 안드로이드 시스템의 삭제 확인 절차를 통해 이루어지고, 이용자가 지정한 백업 폴더 안의 백업본은 앱의 확인창을 거쳐 삭제됩니다.</p>
+            <p>이용자가 매긴 별점 등의 정보는 <strong>기기 내부의 로컬 데이터베이스</strong>에만 저장됩니다. 플러스 백업 기능은 이용자가 직접 지정한 <strong>기기 내 폴더</strong>로 녹음 파일을 복사하며, 외부로 전송하지 않습니다. 플러스 자동 중요 표시를 위해 이용자가 등록한 이름·번호 키워드도 기기 내부에만 저장되며, 연락처에서 선택할 때는 이용자가 고른 이름만 사용하고 연락처 목록 전체에는 접근하지 않습니다. 통화녹음 원본의 삭제는 안드로이드 시스템의 삭제 확인 절차를 통해 이루어지고, 이용자가 지정한 백업 폴더 안의 백업본은 앱의 확인창을 거쳐 삭제됩니다. 플러스 자동 정리를 켜면 이용자가 정한 요일·시간에 정리후보로 표시한 통화녹음을 <strong>안드로이드 휴지통</strong>으로 옮기며, 휴지통 파일은 30일 동안 앱에서 되살릴 수 있고 이후 시스템이 완전히 삭제합니다.</p>
         </div>
 
         <div class="section">
@@ -91,7 +94,7 @@
     <!-- English -->
     <div class="en">
         <h1>CallStar (통화서랍) — Privacy Policy</h1>
-        <p class="subtitle">Last updated: September 2, 2026</p>
+        <p class="subtitle">Last updated: November 1, 2026</p>
 
         <p><strong>통화서랍</strong> ("the App") respects your privacy and does <strong>not collect, transmit, or share any personal information.</strong> All processing happens entirely on your device.</p>
 
@@ -108,15 +111,18 @@
         <div class="section">
             <h2>3. Permissions and why we use them</h2>
             <ul>
-                <li><strong>Phone state (READ_PHONE_STATE):</strong> used only to detect when a call <strong>ends</strong>, so the rating popup can appear. We do not read or store phone numbers or call logs.</li>
+                <li><strong>Phone state (READ_PHONE_STATE):</strong> used only to detect when a call <strong>ends</strong>, so the rating notification (or popup) can appear. We do not read or store phone numbers or call logs.</li>
                 <li><strong>Read audio/media (READ_MEDIA_AUDIO · READ_EXTERNAL_STORAGE):</strong> used to list and play the call recording files stored on your device.</li>
-                <li><strong>Display over other apps (SYSTEM_ALERT_WINDOW):</strong> used to show the rating popup right after a call ends.</li>
+                <li><strong>Notifications (POST_NOTIFICATIONS):</strong> used to show the post-call rating notification and the auto-clean result notification.</li>
+                <li><strong>Display over other apps (SYSTEM_ALERT_WINDOW, optional):</strong> used only if you choose the instant popup instead of notifications, to show it right after a call ends.</li>
+                <li><strong>Media management (MANAGE_MEDIA, optional · Plus):</strong> if you turn on auto-clean and grant this permission yourself, used to move "clean-up candidate" recordings to Android's trash at your scheduled time without a confirmation dialog.</li>
+                <li><strong>Receive boot completed (RECEIVE_BOOT_COMPLETED):</strong> used to restore the auto-clean schedule after your phone restarts.</li>
             </ul>
         </div>
 
         <div class="section">
             <h2>4. Where information is stored</h2>
-            <p>Ratings you assign are stored only in a <strong>local database on your device.</strong> The Plus backup feature copies recording files to a <strong>folder you choose on your device</strong>, and never transmits them elsewhere. Names or numbers you register for Plus auto-marking are also stored only on your device; when you pick from your contacts, only the single name you select is used and the app never accesses your full contact list. Deleting an original call recording goes through Android's own system delete confirmation, and deleting a backup copy in your chosen backup folder is done after a confirmation dialog in the app.</p>
+            <p>Ratings you assign are stored only in a <strong>local database on your device.</strong> The Plus backup feature copies recording files to a <strong>folder you choose on your device</strong>, and never transmits them elsewhere. Names or numbers you register for Plus auto-marking are also stored only on your device; when you pick from your contacts, only the single name you select is used and the app never accesses your full contact list. Deleting an original call recording goes through Android's own system delete confirmation, and deleting a backup copy in your chosen backup folder is done after a confirmation dialog in the app. If you turn on Plus auto-clean, recordings you marked as clean-up candidates are moved to <strong>Android's trash</strong> on the day and time you choose; you can restore them in the app for 30 days, after which the system deletes them permanently.</p>
         </div>
 
         <div class="section">

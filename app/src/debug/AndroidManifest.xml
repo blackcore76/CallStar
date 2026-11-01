@@ -5,5 +5,6 @@
         <receiver
             android:name=".DebugNotifyReceiver"
             android:exported="true" />
+        <receiver android:name=".DebugAutoCleanProbe" android:exported="true" />
     </application>
 </manifest>

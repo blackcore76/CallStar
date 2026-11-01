@@ -102,6 +102,8 @@ class MainActivity : ComponentActivity() {
 
     // 알림에서 눌러 진입한 순간을 알리는 시그널(값이 바뀌면 목록에서 대기 통화 강조).
     private val fromNotiSignal = mutableStateOf(0L)
+    // 자동 정리 결과 알림에서 진입 → "정리된 통화" 화면 열기
+    private val openTrashSignal = mutableStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,6 +122,7 @@ class MainActivity : ComponentActivity() {
                                 AppPrefs.setThemeModeKey(ctx, m.key)
                             },
                             fromNotiSignal = fromNotiSignal.value,
+                            openTrashSignal = openTrashSignal.value,
                         )
                     }
                 }
@@ -138,10 +141,14 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra(EXTRA_FROM_NOTI, false) == true) {
             fromNotiSignal.value = System.currentTimeMillis()
         }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_TRASH, false) == true) {
+            openTrashSignal.value = System.currentTimeMillis()
+        }
     }
 
     companion object {
         const val EXTRA_FROM_NOTI = "from_noti"
+        const val EXTRA_OPEN_TRASH = "open_trash"
     }
 }
 
@@ -187,6 +194,7 @@ private fun CallStarApp(
     themeMode: ThemeMode,
     onThemeChange: (ThemeMode) -> Unit,
     fromNotiSignal: Long = 0L,
+    openTrashSignal: Long = 0L,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -208,6 +216,7 @@ private fun CallStarApp(
 
     var showSettings by remember { mutableStateOf(false) }
     var showBackup by remember { mutableStateOf(false) }
+    var showTrash by remember { mutableStateOf(false) }
     // 알림 타고 들어왔을 때 "이 통화들이에요" 강조할 id 집합 + 세션 1회 판단 플래그
     var hlConsumedSignal by remember { mutableStateOf(0L) }
     var blinking by remember { mutableStateOf(false) }   // 알림 진입 시 "여기요~" 깜빡임 진행 중
@@ -327,6 +336,16 @@ private fun CallStarApp(
         return
     }
 
+    // 자동 정리 결과 알림 탭 → "정리된 통화" 화면
+    LaunchedEffect(openTrashSignal) { if (openTrashSignal > 0L) { showSettings = false; showTrash = true } }
+    // 앱을 열 때마다 자동 정리 예약을 다시 맞춘다(업데이트·설정 변경 대비)
+    LaunchedEffect(Unit) { AutoClean.reschedule(ctx) }
+
+    if (showTrash) {
+        TrashBrowser(modifier = modifier, onBack = { showTrash = false; refresh() })
+        return
+    }
+
     // 백업함 전용 화면 (설정과 분리된 전체화면 뷰어)
     if (showBackup) {
         BackupBrowser(
@@ -441,6 +460,7 @@ private fun CallStarApp(
                 onRemoveKeyword = { autoKeywords = AppPrefs.removeAutoMarkKeyword(ctx, it) },
                 onPickContact = { contactLauncher.launch(null) },
                 onOpenBackup = { showSettings = false; showBackup = true },
+                onOpenTrash = { showSettings = false; showTrash = true },
                 modifier = Modifier.weight(1f),
             )
         } else {
@@ -786,6 +806,7 @@ private fun SettingsPanel(
     onRemoveKeyword: (String) -> Unit,
     onPickContact: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenTrash: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -894,6 +915,11 @@ private fun SettingsPanel(
                             modifier = Modifier.weight(1f),
                         ) { Text("백업 통화 보기") }
                     }
+
+                    HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+                    // 자동 정리
+                    AutoCleanSection(onOpenTrash = onOpenTrash)
 
                     HorizontalDivider(Modifier.padding(vertical = 2.dp))
 
@@ -1325,4 +1351,310 @@ private fun formatDurKo(ms: Long): String {
 private fun fmtClock(ms: Int): String {
     val total = ms / 1000
     return "%d:%02d".format(total / 60, total % 60)
+}
+
+// ══════════ [플러스] 자동 정리 ══════════
+
+private val DOW_LABELS = listOf(
+    java.util.Calendar.SUNDAY to "일", java.util.Calendar.MONDAY to "월", java.util.Calendar.TUESDAY to "화",
+    java.util.Calendar.WEDNESDAY to "수", java.util.Calendar.THURSDAY to "목", java.util.Calendar.FRIDAY to "금",
+    java.util.Calendar.SATURDAY to "토",
+)
+
+/** 작은 선택 칩(요일·시간·주기). */
+@Composable
+private fun PickChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) accent else Color.Transparent,
+        border = BorderStroke(1.dp, if (selected) accent else Color(0x55808080)),
+    ) {
+        Box(Modifier.padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = typography.labelLarge,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** 설정 > 플러스 박스 안의 자동 정리 구역. 설정값은 AppPrefs에 바로 저장하고 예약을 다시 잡는다. */
+@Composable
+private fun AutoCleanSection(onOpenTrash: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var enabled by remember { mutableStateOf(AppPrefs.autoCleanEnabled(ctx)) }
+    var dow by remember { mutableStateOf(AppPrefs.autoCleanDow(ctx)) }
+    var hour by remember { mutableStateOf(AppPrefs.autoCleanHour(ctx)) }
+    var weeks by remember { mutableStateOf(AppPrefs.autoCleanWeeks(ctx)) }
+    var canManage by remember { mutableStateOf(AutoClean.canManageMedia(ctx)) }
+    var pendingCount by remember { mutableStateOf(0) }
+    var pendingBytes by remember { mutableStateOf(0L) }
+    var tick by remember { mutableStateOf(0) }
+    var confirmNow by remember { mutableStateOf(false) }
+
+    // 설정 화면으로 돌아올 때(권한 화면 다녀온 뒤 등) 권한 상태와 대상 수 갱신
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) { canManage = AutoClean.canManageMedia(ctx); tick++ }
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    LaunchedEffect(tick) {
+        val t = withContext(Dispatchers.IO) { AutoClean.targets(ctx) }
+        pendingCount = t.size; pendingBytes = t.sumOf { it.size }
+    }
+
+    fun save() {
+        AppPrefs.setAutoCleanEnabled(ctx, enabled); AppPrefs.setAutoCleanDow(ctx, dow)
+        AppPrefs.setAutoCleanHour(ctx, hour); AppPrefs.setAutoCleanWeeks(ctx, weeks)
+        AutoClean.reschedule(ctx)
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("정리후보 자동 정리", style = typography.titleSmall)
+            Text(
+                "정한 요일 새벽에 △정리후보를 휴지통으로 옮겨요 (30일 뒤 완전 삭제)",
+                style = typography.bodySmall,
+                color = Color(0xFF9E9E9E),
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = { enabled = it; save() })
+    }
+
+    if (enabled) {
+        Text("주기", style = typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(1 to "매주", 2 to "2주마다", 4 to "4주마다").forEach { (w, l) ->
+                PickChip(l, weeks == w, Modifier.weight(1f)) { weeks = w; save() }
+            }
+        }
+        Text("요일", style = typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            DOW_LABELS.forEach { (d, l) -> PickChip(l, dow == d, Modifier.weight(1f)) { dow = d; save() } }
+        }
+        Text("새벽 시간", style = typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            (1..5).forEach { h -> PickChip("${h}시", hour == h, Modifier.weight(1f)) { hour = h; save() } }
+        }
+        val next = AutoClean.nextRunAt(ctx)
+        if (next != null) {
+            Text(
+                "다음 정리: " + SimpleDateFormat("M월 d일(E) a h시 무렵", Locale.KOREA).format(Date(next)),
+                style = typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+
+        // 미디어 관리 권한 안내(안드12+). 없으면 정리 시점에 알림을 한 번 눌러야 함.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !canManage) {
+            Text(
+                "미디어 관리 권한을 켜면 새벽에 확인 없이 자동으로 정리돼요. 켜지 않으면 정리할 때 알림을 한 번 눌러 주셔야 해요.",
+                style = typography.bodySmall,
+                color = Color(0xFF757575),
+            )
+            OutlinedButton(
+                onClick = {
+                    ctx.startActivity(
+                        Intent(Settings.ACTION_REQUEST_MANAGE_MEDIA, Uri.parse("package:${ctx.packageName}"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("미디어 관리 권한 켜기") }
+        }
+    }
+
+    Text(
+        if (pendingCount > 0) "지금 정리후보 ${pendingCount}건 · ${AutoClean.fmtBytes(pendingBytes)}" else "지금 정리후보가 없어요",
+        style = typography.bodySmall,
+        color = Color(0xFF757575),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = { confirmNow = true },
+            enabled = pendingCount > 0,
+            modifier = Modifier.weight(1f),
+        ) { Text(if (pendingCount > 0) "지금 정리" else "정리할 통화 없음") }
+        OutlinedButton(onClick = onOpenTrash, modifier = Modifier.weight(1f)) { Text("정리된 통화") }
+    }
+
+    if (confirmNow) {
+        AlertDialog(
+            onDismissRequest = { confirmNow = false },
+            title = { Text("지금 정리할까요?") },
+            text = {
+                Text(
+                    "△정리후보 ${pendingCount}건(${AutoClean.fmtBytes(pendingBytes)})을 휴지통으로 옮겨요.\n" +
+                        "30일 동안은 \"정리된 통화\"에서 되살릴 수 있어요.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmNow = false
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            val list = AutoClean.targets(ctx)
+                            if (AutoClean.canManageMedia(ctx)) AutoClean.trashSilently(ctx, list)
+                            else ctx.startActivity(DeleteRequestActivity.trashIntent(ctx, list.map { it.id }.toLongArray()))
+                        }
+                        tick++
+                    }
+                }) { Text("정리") }
+            },
+            dismissButton = { TextButton(onClick = { confirmNow = false }) { Text("취소") } },
+        )
+    }
+}
+
+/** 휴지통에 있는 통화녹음 한 건. */
+private data class TrashedCall(val id: Long, val name: String, val size: Long, val expiresSec: Long)
+
+/** 휴지통(30일 보관)에 있는 통화녹음 조회 — 통화 폴더만. */
+private fun queryTrashedCalls(context: Context): List<TrashedCall> {
+    val args = Bundle().apply {
+        putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
+        putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${MediaStore.MediaColumns.DATE_EXPIRES} DESC")
+    }
+    val out = ArrayList<TrashedCall>()
+    try {
+        context.contentResolver.query(
+            AutoClean.COLLECTION,
+            arrayOf(
+                MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE,
+                MediaStore.MediaColumns.DATE_EXPIRES, MediaStore.MediaColumns.RELATIVE_PATH,
+            ),
+            args, null,
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val path = (c.getString(4) ?: "").lowercase()
+                if (listOf("recordings/call/", "sounds/call/", "call/").none { path.startsWith(it) }) continue
+                out += TrashedCall(c.getLong(0), c.getString(1) ?: "", c.getLong(2), c.getLong(3))
+            }
+        }
+    } catch (_: Exception) {}
+    return out
+}
+
+/** "정리된 통화" — 휴지통에 있는 통화녹음을 보고 되살리는 화면. */
+@Composable
+private fun TrashBrowser(modifier: Modifier = Modifier, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var items by remember { mutableStateOf<List<TrashedCall>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var reload by remember { mutableStateOf(0) }
+    var selected by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var status by remember { mutableStateOf("") }
+
+    BackHandler { onBack() }
+
+    LaunchedEffect(reload) {
+        loading = true
+        items = withContext(Dispatchers.IO) { queryTrashedCalls(ctx) }
+        selected = selected intersect items.map { it.id }.toSet()
+        loading = false
+    }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { r ->
+        status = if (r.resultCode == android.app.Activity.RESULT_OK) "되살렸어요. 원래 목록에서 다시 보여요." else "되살리기를 취소했어요."
+        selected = emptySet(); reload++
+    }
+
+    fun restore(ids: Collection<Long>) {
+        if (ids.isEmpty()) return
+        val uris = ids.map { ContentUris.withAppendedId(AutoClean.COLLECTION, it) }
+        val pi = MediaStore.createTrashRequest(ctx.contentResolver, uris, false)
+        restoreLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+    }
+
+    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Text("←", style = typography.titleLarge) }
+            Spacer(Modifier.width(2.dp))
+            Column(Modifier.weight(1f)) {
+                Text("정리된 통화", style = typography.headlineSmall)
+                Text(
+                    "휴지통에 30일 보관 후 완전 삭제돼요 · 골라서 되살릴 수 있어요",
+                    style = typography.bodySmall,
+                    color = Color(0xFF9E9E9E),
+                )
+            }
+            IconButton(onClick = { reload++ }, enabled = !loading) {
+                Text(if (loading) "…" else "↻", style = typography.titleLarge)
+            }
+        }
+        if (status.isNotEmpty()) {
+            Text(status, style = typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(Modifier.height(6.dp))
+
+        when {
+            loading -> CenterNote("불러오는 중…")
+            items.isEmpty() -> CenterNote("휴지통에 있는 통화녹음이 없어요.")
+            else -> LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(items, key = { it.id }) { t ->
+                    val checked = t.id in selected
+                    Card(
+                        Modifier.fillMaxWidth().clickable {
+                            selected = if (checked) selected - t.id else selected + t.id
+                        },
+                    ) {
+                        Row(
+                            Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp, end = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = checked, onCheckedChange = {
+                                selected = if (checked) selected - t.id else selected + t.id
+                            })
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    t.name.removePrefix("통화 녹음 ").removePrefix("통화 "),
+                                    style = typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                val left = ((t.expiresSec * 1000L - System.currentTimeMillis() + 86_399_999L) / 86_400_000L).coerceAtLeast(0)   // 올림: 방금 옮긴 건 "30일 뒤"
+                                Text(
+                                    "${fmtSize(t.size)} · ${left}일 뒤 완전 삭제",
+                                    style = typography.bodySmall,
+                                    color = Color(0xFF9E9E9E),
+                                )
+                            }
+                        }
+                    }
+                }
+                item { Spacer(Modifier.height(8.dp)) }
+            }
+        }
+
+        if (items.isNotEmpty()) {
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { selected = if (selected.size == items.size) emptySet() else items.map { it.id }.toSet() },
+                    modifier = Modifier.weight(1f),
+                ) { Text(if (selected.size == items.size) "전체해제" else "전체선택") }
+                Button(
+                    onClick = { scope.launch { restore(selected) } },
+                    enabled = selected.isNotEmpty(),
+                    modifier = Modifier.weight(1f),
+                ) { Text("되살리기 (${selected.size})") }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
 }

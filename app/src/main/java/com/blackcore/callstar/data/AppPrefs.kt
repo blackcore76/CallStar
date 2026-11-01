@@ -105,4 +105,23 @@ object AppPrefs {
         setAutoMarkKeywords(context, cur)
         return cur
     }
+
+    // ── 자동 정리(플러스): 정해진 요일·새벽 시간에 △정리후보를 휴지통으로 ──────────
+
+    private const val K_AC_ENABLED = "autoclean_enabled"
+    private const val K_AC_DOW = "autoclean_dow"        // java.util.Calendar.SUNDAY(1) ~ SATURDAY(7)
+    private const val K_AC_HOUR = "autoclean_hour"      // 0~23
+    private const val K_AC_WEEKS = "autoclean_weeks"    // 주기: 1 / 2 / 4 주
+    private const val K_AC_LAST = "autoclean_last_run"  // 마지막 실행 epoch millis
+
+    fun autoCleanEnabled(c: Context) = sp(c).getBoolean(K_AC_ENABLED, false)
+    fun setAutoCleanEnabled(c: Context, v: Boolean) = sp(c).edit().putBoolean(K_AC_ENABLED, v).apply()
+    fun autoCleanDow(c: Context) = sp(c).getInt(K_AC_DOW, java.util.Calendar.SUNDAY)
+    fun setAutoCleanDow(c: Context, v: Int) = sp(c).edit().putInt(K_AC_DOW, v).apply()
+    fun autoCleanHour(c: Context) = sp(c).getInt(K_AC_HOUR, 3)
+    fun setAutoCleanHour(c: Context, v: Int) = sp(c).edit().putInt(K_AC_HOUR, v).apply()
+    fun autoCleanWeeks(c: Context) = sp(c).getInt(K_AC_WEEKS, 1)
+    fun setAutoCleanWeeks(c: Context, v: Int) = sp(c).edit().putInt(K_AC_WEEKS, v).apply()
+    fun autoCleanLastRun(c: Context) = sp(c).getLong(K_AC_LAST, 0L)
+    fun setAutoCleanLastRun(c: Context, v: Long) = sp(c).edit().putLong(K_AC_LAST, v).apply()
 }

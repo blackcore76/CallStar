@@ -28,6 +28,11 @@ class DeleteRequestActivity : ComponentActivity() {
     companion object {
         private const val TAG = "CallStar/Delete"
         const val EXTRA_IDS = "ids"
+        const val EXTRA_TRASH = "trash"   // true면 완전 삭제 대신 휴지통(30일 보관)
+
+        /** 자동 정리 "정리 준비" 알림 탭 → 휴지통 이동(권한 없을 때 시스템 확인창). */
+        fun trashIntent(context: android.content.Context, ids: LongArray): Intent =
+            intent(context, ids).putExtra(EXTRA_TRASH, true)
 
         fun intent(context: android.content.Context, ids: LongArray): Intent =
             Intent(context, DeleteRequestActivity::class.java).apply {
@@ -38,17 +43,25 @@ class DeleteRequestActivity : ComponentActivity() {
 
     private lateinit var launcher: ActivityResultLauncher<IntentSenderRequest>
     private var targetIds: List<Long> = emptyList()
+    private var trashMode = false
+    private var trashTargets: List<AutoClean.Target> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        trashMode = intent.getBooleanExtra(EXTRA_TRASH, false)
         targetIds = intent.getLongArrayExtra(EXTRA_IDS)?.toList().orEmpty()
             .filter { it > 0L }
 
         launcher = registerForActivityResult(
             ActivityResultContracts.StartIntentSenderForResult()
         ) { result ->
-            if (result.resultCode == RESULT_OK) {
+            if (result.resultCode == RESULT_OK && trashMode) {
+                Log.d(TAG, "휴지통 이동 확정: $targetIds")
+                val done = trashTargets
+                Thread { AutoClean.onTrashed(applicationContext, done) }.start()
+                finish()
+            } else if (result.resultCode == RESULT_OK) {
                 Log.d(TAG, "삭제 확정: $targetIds")
                 lifecycleScope.launch {
                     CallListRepository.forgetRatings(applicationContext, targetIds)
@@ -64,7 +77,22 @@ class DeleteRequestActivity : ComponentActivity() {
             finish()
             return
         }
-        requestDelete(targetIds)
+        if (trashMode) requestTrash(targetIds) else requestDelete(targetIds)
+    }
+
+    private fun requestTrash(ids: List<Long>) {
+        // 결과 알림용 이름·크기 (지금 실제 있는 것만)
+        trashTargets = CallRecordingFinder.queryCallRecordings(this)
+            .filter { it.id in ids }.map { AutoClean.Target(it.id, it.displayName, it.sizeBytes) }
+        val uris = trashTargets.map { ContentUris.withAppendedId(AutoClean.COLLECTION, it.id) }
+        if (uris.isEmpty()) { finish(); return }
+        try {
+            val pi = MediaStore.createTrashRequest(contentResolver, uris, true)
+            launcher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+        } catch (e: Exception) {
+            Log.e(TAG, "휴지통 요청 실패", e)
+            finish()
+        }
     }
 
     private fun requestDelete(ids: List<Long>) {
