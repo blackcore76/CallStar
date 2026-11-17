@@ -12,8 +12,8 @@ android {
         applicationId "com.blackcore.callstar"
         minSdk 30
         targetSdk 36
-        versionCode 111
-        versionName "1.1.1"
+        versionCode 112
+        versionName "1.1.2"
     }
 
     signingConfigs {
@@ -77,6 +77,9 @@ dependencies {
 
     // [단계 5] 백업 폴더(SAF) 복사
     implementation 'androidx.documentfile:documentfile:1.0.1'
+
+    // 새 버전 안내: 폰 안의 Play 스토어 앱에 묻기만 함(인터넷 권한 불필요)
+    implementation 'com.google.android.play:app-update:2.1.0'
 
     def composeBom = platform('androidx.compose:compose-bom:2024.09.02')
     implementation composeBom

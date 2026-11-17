@@ -233,6 +233,7 @@ private fun CallStarApp(
     var granted by remember { mutableStateOf(allGranted(ctx)) }
     var canOverlay by remember { mutableStateOf(Settings.canDrawOverlays(ctx)) }
     var notiOn by remember { mutableStateOf(notificationsOn(ctx)) }
+    var newVersion by remember { mutableStateOf(0) }       // Play에 올라온 새 버전 코드(없으면 0)
     var permAsked by remember { mutableStateOf(false) }   // 한 번 거절되면 '설정에서 켜기' 안내
 
     var rows by remember { mutableStateOf<List<CallRow>>(emptyList()) }
@@ -357,6 +358,7 @@ private fun CallStarApp(
                 granted = allGranted(ctx)
                 canOverlay = Settings.canDrawOverlays(ctx)
                 notiOn = notificationsOn(ctx)
+                AppUpdate.check(ctx) { newVersion = it }
                 if (granted) refresh()
             } else if (e == Lifecycle.Event.ON_PAUSE) {
                 player.stop()
@@ -460,6 +462,17 @@ private fun CallStarApp(
             IconButton(onClick = { showSettings = !showSettings }) {
                 Text("⚙", style = typography.titleLarge)
             }
+        }
+
+        // Play에 새 버전이 있으면 맨 위에 안내 → 누르면 Play 스토어 페이지
+        if (newVersion > 0) {
+            Spacer(Modifier.height(8.dp))
+            NoticeCard(
+                title = "새 버전이 있어요",
+                body = "Play 스토어에서 업데이트해 주세요.",
+                action = "업데이트",
+                onAction = { AppUpdate.openStore(ctx) },
+            )
         }
 
         if (showSettings) {
