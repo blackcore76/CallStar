@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.ContactsContract
 import android.provider.Settings
+import android.telecom.TelecomManager
 import android.text.format.DateUtils
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -77,6 +78,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
@@ -181,6 +183,35 @@ private fun allGranted(ctx: Context): Boolean =
         ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED
     }
 
+/** 통화 후 표시 알림이 실제로 뜰 수 있는지(권한 + 앱 알림 스위치). */
+private fun notificationsOn(ctx: Context): Boolean {
+    val perm = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
+    return perm && NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+}
+
+private fun openAppNotificationSettings(ctx: Context) {
+    val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+    try { ctx.startActivity(i) } catch (_: Exception) { openAppDetails(ctx) }
+}
+
+private fun openAppDetails(ctx: Context) {
+    ctx.startActivity(
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}"))
+    )
+}
+
+/** 전화 앱의 통화 설정 화면(갤럭시는 여기 안에 '통화 녹음'이 있다). 안 되면 전화 앱만 연다. */
+private fun openCallSettings(ctx: Context) {
+    try {
+        ctx.startActivity(Intent(TelecomManager.ACTION_SHOW_CALL_SETTINGS))
+    } catch (_: Exception) {
+        try { ctx.startActivity(Intent(Intent.ACTION_DIAL)) } catch (_: Exception) {}
+    }
+}
+
 private val AUDIO_COLLECTION: Uri
     get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -201,6 +232,8 @@ private fun CallStarApp(
 
     var granted by remember { mutableStateOf(allGranted(ctx)) }
     var canOverlay by remember { mutableStateOf(Settings.canDrawOverlays(ctx)) }
+    var notiOn by remember { mutableStateOf(notificationsOn(ctx)) }
+    var permAsked by remember { mutableStateOf(false) }   // 한 번 거절되면 '설정에서 켜기' 안내
 
     var rows by remember { mutableStateOf<List<CallRow>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -270,7 +303,12 @@ private fun CallStarApp(
 
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { granted = allGranted(ctx); if (granted) refresh() }
+    ) {
+        granted = allGranted(ctx)
+        notiOn = notificationsOn(ctx)
+        permAsked = true
+        if (granted) refresh()
+    }
 
     // 삭제 요청(시스템 확인 다이얼로그) 결과
     val deleteLauncher = rememberLauncherForActivityResult(
@@ -318,6 +356,7 @@ private fun CallStarApp(
             if (e == Lifecycle.Event.ON_RESUME) {
                 granted = allGranted(ctx)
                 canOverlay = Settings.canDrawOverlays(ctx)
+                notiOn = notificationsOn(ctx)
                 if (granted) refresh()
             } else if (e == Lifecycle.Event.ON_PAUSE) {
                 player.stop()
@@ -332,7 +371,12 @@ private fun CallStarApp(
     BackHandler(enabled = showSettings) { showSettings = false }
 
     if (!granted) {
-        PermissionGate(Modifier.then(modifier)) { permLauncher.launch(requiredPermissions()) }
+        PermissionGate(
+            Modifier.then(modifier),
+            denied = permAsked,
+            onRequest = { permLauncher.launch(requiredPermissions()) },
+            onOpenSettings = { openAppDetails(ctx) },
+        )
         return
     }
 
@@ -482,6 +526,17 @@ private fun CallStarApp(
             ) { Text(if (allSelected) "전체해제" else "전체선택") }
         }
 
+        // 알림이 꺼져 있으면 통화 후 표시 알림이 안 온다 → 눈에 띄게 알려준다
+        if (!overlayMode && !notiOn) {
+            NoticeCard(
+                title = "알림이 꺼져 있어요",
+                body = "통화가 끝나도 중요도 표시 알림이 오지 않아요.",
+                action = "알림 켜기",
+                onAction = { openAppNotificationSettings(ctx) },
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
         // 안내/상태 (일괄 액션은 화면 하단 바로 이동)
         Text(
             if (status.isNotEmpty()) status
@@ -497,12 +552,15 @@ private fun CallStarApp(
                 Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    if (laterOnly) "정리후보로 표시된 통화녹음이 없어요"
-                    else "통화녹음이 없어요",
-                    style = typography.bodyMedium,
-                    color = Color(0xFF9E9E9E),
-                )
+                if (laterOnly || loading) {
+                    Text(
+                        if (loading) "불러오는 중…" else "정리후보로 표시된 통화녹음이 없어요",
+                        style = typography.bodyMedium,
+                        color = Color(0xFF9E9E9E),
+                    )
+                } else {
+                    RecordingSetupGuide(onOpenCallSettings = { openCallSettings(ctx) })
+                }
             }
         } else {
             LazyColumn(
@@ -1313,20 +1371,113 @@ private fun backupFolderName(context: Context): String? {
 }
 
 @Composable
-private fun PermissionGate(modifier: Modifier = Modifier, onRequest: () -> Unit) {
+private fun PermissionGate(
+    modifier: Modifier = Modifier,
+    denied: Boolean,
+    onRequest: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     Column(
-        modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Spacer(Modifier.height(24.dp))
-        Text("통화서랍", style = typography.headlineSmall)
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = painterResource(R.drawable.ic_brand),
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text("통화서랍", style = typography.headlineSmall)
+        }
         Text(
-            "통화가 끝난 걸 알아채고, 갤럭시가 저장한 통화녹음을 목록으로 보여주려면 " +
-                "전화 상태와 오디오 읽기 권한이 필요해요.\n\n" +
-                "통화서랍은 통화를 녹음하지 않고, 녹음 파일을 어디에도 보내지 않아요.",
+            "통화가 끝나면 바로 중요도를 표시하고, 쌓인 통화녹음을 정리해요.",
             style = typography.bodyMedium,
         )
-        Button(onClick = onRequest) { Text("권한 요청") }
+        SetupStep("1", "권한 허용", "전화 상태 · 오디오 읽기 · 알림 권한을 허용해 주세요.")
+        SetupStep("2", "갤럭시 통화 자동 녹음 켜기", "전화 앱 → ⋮ → 설정 → 통화 녹음 → 통화 자동 녹음")
+        SetupStep("3", "통화 후 알림에서 표시", "★중요 · △정리후보 · 🗑삭제 중 하나만 누르면 끝이에요.")
+        Text(
+            "통화서랍은 통화를 녹음하지 않고, 녹음 파일을 어디에도 보내지 않아요.",
+            style = typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (denied) {
+            Text(
+                "권한이 허용되지 않았어요. 요청 창이 뜨지 않으면 설정에서 직접 켜 주세요.",
+                style = typography.bodySmall,
+                color = DeleteRed,
+            )
+        }
+        Button(onClick = onRequest, modifier = Modifier.fillMaxWidth()) {
+            Text(if (denied) "다시 권한 요청" else "권한 허용하고 시작하기")
+        }
+        if (denied) {
+            OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                Text("설정에서 직접 켜기")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupStep(num: String, title: String, desc: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(num, style = typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary)
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = typography.titleSmall)
+            Text(desc, style = typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** 통화녹음이 하나도 없을 때: 대개 갤럭시 자동 녹음이 꺼져 있는 경우라 켜는 길을 안내. */
+@Composable
+private fun RecordingSetupGuide(onOpenCallSettings: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("아직 통화녹음이 없어요", style = typography.titleMedium)
+        Text(
+            "갤럭시 통화 자동 녹음을 켜 두면\n다음 통화부터 여기에 나타나요.",
+            style = typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "전화 앱 → ⋮ → 설정 → 통화 녹음 → 통화 자동 녹음",
+            style = typography.bodySmall,
+            textAlign = TextAlign.Center,
+        )
+        Button(onClick = onOpenCallSettings) { Text("전화 설정 열기") }
+    }
+}
+
+@Composable
+private fun NoticeCard(title: String, body: String, action: String, onAction: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Text(body, style = typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            TextButton(onClick = onAction) { Text(action) }
+        }
     }
 }
 
